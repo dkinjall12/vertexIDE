@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { ThemeToggle } from "@/components/ui/toggle-theme";
+import UserButton from "../auth/components/user-button";
 
 export function Header() {
   return (
@@ -76,6 +77,7 @@ export function Header() {
                   <span className="text-zinc-300 dark:text-zinc-700">|</span>
                   {/* <HeaderPro /> */}
                   <ThemeToggle />
+                  <UserButton/>
                 </div>
 
                 {/* Mobile Navigation remains unchanged */}
@@ -93,6 +95,7 @@ export function Header() {
                     API
                   </Link>
                   <ThemeToggle />
+                  <UserButton/>
                 </div>
               </div>
             </div>

@@ -89,14 +89,7 @@ export function DashboardSidebar() {
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={pathname === "/learn"} tooltip="Learn">
-                <Link href="/learn">
-                  <BookOpen className="h-4 w-4" />
-                  <span>Learn</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+           
           </SidebarMenu>
         </SidebarGroup>
 
