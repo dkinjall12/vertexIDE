@@ -49,13 +49,10 @@ export function DashboardSidebar() {
   const [recentPlaygrounds, setRecentPlaygrounds] = useState(mockPlaygrounds)
 
   return (
-    <Sidebar variant="inset" collapsible="icon" >
+    <Sidebar variant="inset" collapsible="icon" className="border-1 border-r" >
       <SidebarHeader>
         <div className="flex items-center gap-2 px-4 py-3 justify-center">
-         
             <Image src={"/logo.svg"} alt="logo" height={60} width={60} />
-          
-         
         </div>
         <Button variant="brand" className="mx-4 mb-2 justify-start gap-2">
           <Plus className="h-4 w-4" />
