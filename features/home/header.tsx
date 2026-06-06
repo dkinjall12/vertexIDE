@@ -1,41 +1,10 @@
-import { Flame, Menu } from "lucide-react";
 import Link from "next/link";
-
 import Image from "next/image";
-
-import { ArrowUpRight } from "lucide-react";
-import { PartyPopper } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/toggle-theme";
 
 export function Header() {
   return (
     <>
-      {/* Mobile Pro Banner completely separate from sticky header */}
-      <div className="sm:hidden w-full p-2.5 bg-white dark:bg-black/5">
-        <Link
-          href="#"
-          target="_blank"
-          className="flex items-center justify-center gap-2"
-        >
-          <span className="flex items-center gap-2">
-            <PartyPopper className="w-3.5 h-3.5" />
-            <span className="text-transparent bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 bg-clip-text font-semibold">
-              Explore new components
-            </span>
-          </span>
-
-          <div className="group relative inline-flex items-center gap-2 px-3 py-1 text-sm rounded-lg bg-zinc-900 dark:bg-zinc-100 transition-colors">
-            <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 opacity-40 group-hover:opacity-80 blur-sm transition-opacity duration-500" />
-            <div className="relative z-10 flex items-center gap-2">
-              <span className="text-white dark:text-zinc-900">
-                CodeSnippetUI Pro
-              </span>
-              <ArrowUpRight className="w-3.5 h-3.5 text-white/90 dark:text-zinc-900/90" />
-            </div>
-          </div>
-        </Link>
-      </div>
-
       <div className="sticky top-0 left-0 right-0 z-50">
         <div className="bg-white dark:bg-black/5 w-full">
           {/* Rest of the header content */}
@@ -59,8 +28,16 @@ export function Header() {
               <div className="relative z-10 flex items-center justify-between w-full gap-2">
                 {/* Logo Section with Navigation Links */}
                 <div className="flex items-center gap-6 justify-center">
-                  <Link href="/" className="flex items-center gap-2 justify-center">
-                    <Image  src={"/logo.svg"} alt="Logo" height={60} width={60}/>
+                  <Link
+                    href="/"
+                    className="flex items-center gap-2 justify-center"
+                  >
+                    <Image
+                      src={"/logo.svg"}
+                      alt="Logo"
+                      height={60}
+                      width={60}
+                    />
 
                     <span className="hidden sm:block font-extrabold text-lg">
                       VibeCode Editor
@@ -73,7 +50,7 @@ export function Header() {
                       href="/docs/components/background-paths"
                       className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors"
                     >
-                      Components
+                      Docs
                     </Link>
                     {/* <Link
                                             href="/pricing"
@@ -86,7 +63,7 @@ export function Header() {
                       target="_blank"
                       className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors flex items-center gap-2"
                     >
-                      Templates
+                      API
                       <span className="text-green-500 dark:text-green-400 border border-green-500 dark:border-green-400 rounded-lg px-1 py-0.5 text-xs">
                         New
                       </span>
@@ -107,13 +84,13 @@ export function Header() {
                     href="/docs/components/action-search-bar"
                     className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors"
                   >
-                    Components
+                    Docs
                   </Link>
                   <Link
                     href="/pricing"
                     className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 transition-colors"
                   >
-                    Pricing
+                    API
                   </Link>
                   <ThemeToggle />
                 </div>

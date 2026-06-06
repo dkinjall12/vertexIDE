@@ -23,7 +23,7 @@ export default function Home() {
         It is designed to help you write, debug, and optimize your code
         efficiently.
       </p>
-      <Link href={"/editor"}>
+      <Link href={"/dashboard"}>
         <Button variant={"brand"} className="mb-4" size={"lg"}>
           Get Started
           <ArrowUpRight className="w-3.5 h-3.5" />
