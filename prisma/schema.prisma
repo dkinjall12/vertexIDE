@@ -54,10 +54,18 @@ model Account {
   @@index([userId])
 }
 
+
+enum Templates{
+  REACT
+  NEXTJS
+  EXPRESS
+}
+
 model Playground {
   id String @id @default(cuid()) @map("_id")
   title String
   description String?
+  template  Templates  @default(REACT)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   userId String 

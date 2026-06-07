@@ -1,10 +1,19 @@
+"use client";
+import TemplateSelectionModal from "@/components/modal/template-selector-modal";
 import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import Image from "next/image"
+import { useState } from "react"
 
 const AddNewButton = () => {
+  const [isModalOpen, setIsModalOpen] = useState(false)
+
+
+
   return (
+    <>
     <div
+    onClick={() => setIsModalOpen(true)}
       className="group px-6 py-6 flex flex-row justify-between items-center border rounded-lg bg-muted cursor-pointer 
       transition-all duration-300 ease-in-out
       hover:bg-background hover:border-[#E93F3F] hover:scale-[1.02]
@@ -34,7 +43,10 @@ const AddNewButton = () => {
           className="transition-transform duration-300 group-hover:scale-110"
         />
       </div>
+      
     </div>
+    <TemplateSelectionModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      </>
   )
 }
 
