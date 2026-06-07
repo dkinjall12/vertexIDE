@@ -45,3 +45,15 @@ export const getAllPlaygroundForUser = async ()=>{
         console.log(error)
     }
 }
+
+export const getPlaygroundById = async (id:string)=>{
+    try {
+        const playground = await db.playground.findUnique({
+            where:{id},
+          
+        })
+        return playground;
+    } catch (error) {
+        console.log(error)
+    }
+}
