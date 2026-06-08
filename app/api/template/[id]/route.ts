@@ -58,13 +58,13 @@ export async function GET(
       return Response.json({ error: "Invalid JSON structure" }, { status: 500 });
     }
 
-    // Save to the DB
-    await db.templateFile.create({
-      data: {
-        playgroundId: id,
-        content: JSON.stringify(result.items , null, 2),
-      },
-    });
+    // // Save to the DB
+    // await db.templateFile.create({
+    //   data: {
+    //     playgroundId: id,
+    //     content: JSON.stringify(result.items , null, 2),
+    //   },
+    // });
 
     // Optional: Clean up the output file
     await fs.unlink(outputFile);

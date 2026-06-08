@@ -79,6 +79,8 @@ model TemplateFile {
   content Json
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  playgroundId String
+  playgroundId String @unique
   playground Playground @relation(fields: [playgroundId], references: [id], onDelete: Cascade)
+
+
 }

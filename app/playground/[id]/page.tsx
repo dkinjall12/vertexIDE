@@ -7,7 +7,7 @@ import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { TemplateFileTree } from "@/features/playground/components/playground-explorer";
 import type { TemplateFile } from "@/features/playground/libs/path-to-json";
 import { useParams } from "next/navigation";
-import { getPlaygroundById } from "@/features/playground/actions";
+import { getPlaygroundById, SaveUpdatedCode } from "@/features/playground/actions";
 import { toast } from "sonner";
 import { Loader2, FileText, FolderOpen, AlertCircle, Save } from "lucide-react";
 import Editor, { type Monaco } from "@monaco-editor/react";
@@ -17,7 +17,7 @@ import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
-} from "@/components/ui/resizable"
+} from "@/components/ui/resizable";
 import WebContainerPreview from "@/features/webcontainers/components/webcontainer-preveiw";
 
 
@@ -110,22 +110,42 @@ const MainPlaygroundPage: React.FC = () => {
   /**
    * Fetch playground metadata
    */
-  const fetchPlaygroundTemplateData = async () => {
-    if (!id) return;
+const fetchPlaygroundTemplateData = async () => {
+  if (!id) return;
 
-    try {
-      setLoadingStep(1);
-      setError(null);
-      const data = await getPlaygroundById(id);
-      setPlaygroundData(data!);
-      setLoadingStep(2);
-      toast.success("Playground metadata loaded");
-    } catch (error) {
-      console.error("Error loading playground:", error);
-      setError("Failed to load playground data");
-      toast.error("Failed to load playground data");
+  try {
+    setLoadingStep(1);
+    setError(null);
+
+    const data = await getPlaygroundById(id);
+    // @ts-ignore
+    setPlaygroundData(data);
+
+    const rawContent = data?.templateFiles?.[0]?.content;
+
+    if (rawContent) {
+      // 1. Parse the JSON string from DB
+      // @ts-ignore
+      const parsedContent = JSON.parse(rawContent);
+
+      // 2. Set it directly as template data
+      setTemplateData(parsedContent);
+
+      setLoadingStep(3);
+      toast.success("Loaded template from saved content");
+      return;
     }
-  };
+
+    setLoadingStep(2);
+    toast.success("Playground metadata loaded");
+    await loadTemplate(); // No template in DB, fetch from API
+  } catch (error) {
+    console.error("Error loading playground:", error);
+    setError("Failed to load playground data");
+    toast.error("Failed to load playground data");
+  }
+};
+
 
   /**
    * Load template data from API
@@ -177,7 +197,7 @@ const MainPlaygroundPage: React.FC = () => {
 
   // Load template once playground data is available
   useEffect(() => {
-    if (playgroundData && id) {
+    if (playgroundData && id && playgroundData.templateFiles?.length < 0) {
       loadTemplate();
     }
   }, [playgroundData, id]);
@@ -469,6 +489,8 @@ const MainPlaygroundPage: React.FC = () => {
   /**
    * Handle save action
    */
+
+  // *Handle Save use to save whatever written in JSON
   const handleSave = async () => {
     if (!selectedFile || !editorContent) return;
 
@@ -484,9 +506,9 @@ const MainPlaygroundPage: React.FC = () => {
         `Saved ${selectedFile.filename}.${selectedFile.fileExtension}`
       );
 
-      // You can add your actual save implementation here
-      // For example:
-      // await saveFileContent(id, selectedFile.path, editorContent);
+      // Save the entire updated FileSystemItem
+     let res =  await SaveUpdatedCode(id , templateData!);
+     console.log(res)
     } catch (error) {
       console.error("Error saving file:", error);
       toast.error("Failed to save file");
@@ -576,7 +598,7 @@ const MainPlaygroundPage: React.FC = () => {
 
   // Main playground view
   return (
-  <>
+    <>
       <TemplateFileTree
         data={templateData}
         onFileSelect={handleFileSelect}
@@ -615,56 +637,59 @@ const MainPlaygroundPage: React.FC = () => {
         </header>
         <div className="h-[calc(100vh-4rem)]">
           {selectedFile ? (
-            <ResizablePanelGroup direction="horizontal" className="h-full max-w-screen">
+            <ResizablePanelGroup
+              direction="horizontal"
+              className="h-full max-w-screen"
+            >
               <ResizablePanel>
-                      <Editor
-              height="100%"
-              value={editorContent}
-              onChange={handleEditorChange}
-              onMount={handleEditorDidMount}
-              options={{
-                readOnly: false,
-                minimap: { enabled: true },
-                scrollBeyondLastLine: false,
-                fontSize: 20,
-                automaticLayout: true,
-                folding: true,
-                foldingStrategy: "auto",
-                showFoldingControls: "always",
-                lineNumbers: "on",
-                lineDecorationsWidth: 10,
-                renderLineHighlight: "all",
-                cursorBlinking: "smooth",
-                cursorSmoothCaretAnimation: "on",
-                suggestOnTriggerCharacters: true,
-                acceptSuggestionOnCommitCharacter: true,
-                wordBasedSuggestions: "allDocuments",
-                quickSuggestions: true,
-                scrollbar: {
-                  verticalScrollbarSize: 10,
-                  horizontalScrollbarSize: 10,
-                  useShadows: true,
-                },
-                bracketPairColorization: {
-                  enabled: true,
-                },
-                guides: {
-                  bracketPairs: true,
-                  indentation: true,
-                },
-                padding: {
-                  top: 10,
-                  bottom: 10,
-                },
-              }}
-              // Don't set defaultLanguage here, we'll set it dynamically in updateEditorLanguage
-            />
+                <Editor
+                  height="100%"
+                  value={editorContent}
+                  onChange={handleEditorChange}
+                  onMount={handleEditorDidMount}
+                  options={{
+                    readOnly: false,
+                    minimap: { enabled: true },
+                    scrollBeyondLastLine: false,
+                    fontSize: 20,
+                    automaticLayout: true,
+                    folding: true,
+                    foldingStrategy: "auto",
+                    showFoldingControls: "always",
+                    lineNumbers: "on",
+                    lineDecorationsWidth: 10,
+                    renderLineHighlight: "all",
+                    cursorBlinking: "smooth",
+                    cursorSmoothCaretAnimation: "on",
+                    suggestOnTriggerCharacters: true,
+                    acceptSuggestionOnCommitCharacter: true,
+                    wordBasedSuggestions: "allDocuments",
+                    quickSuggestions: true,
+                    scrollbar: {
+                      verticalScrollbarSize: 10,
+                      horizontalScrollbarSize: 10,
+                      useShadows: true,
+                    },
+                    bracketPairColorization: {
+                      enabled: true,
+                    },
+                    guides: {
+                      bracketPairs: true,
+                      indentation: true,
+                    },
+                    padding: {
+                      top: 10,
+                      bottom: 10,
+                    },
+                  }}
+                  // Don't set defaultLanguage here, we'll set it dynamically in updateEditorLanguage
+                />
               </ResizablePanel>
-      
-                <ResizableHandle />
-                <ResizablePanel>
-                 <WebContainerPreview templateData={templateData}/>
-                </ResizablePanel>
+
+              <ResizableHandle />
+              <ResizablePanel>
+                <WebContainerPreview templateData={templateData} />
+              </ResizablePanel>
             </ResizablePanelGroup>
           ) : (
             <div className="flex flex-col h-full items-center justify-center text-muted-foreground gap-4">
