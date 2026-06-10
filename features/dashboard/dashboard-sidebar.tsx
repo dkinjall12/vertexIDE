@@ -49,6 +49,7 @@ export function DashboardSidebar() {
   const [recentPlaygrounds, setRecentPlaygrounds] = useState(mockPlaygrounds)
 
   return (
+<<<<<<< HEAD
     <Sidebar variant="inset" collapsible="icon" >
       <SidebarHeader>
         <div className="flex items-center gap-2 px-4 py-3 justify-center">
@@ -56,6 +57,12 @@ export function DashboardSidebar() {
             <Image src={"/logo.svg"} alt="logo" height={60} width={60} />
           
          
+=======
+    <Sidebar variant="inset" collapsible="icon" className="border-1 border-r" >
+      <SidebarHeader>
+        <div className="flex items-center gap-2 px-4 py-3 justify-center">
+            <Image src={"/logo.svg"} alt="logo" height={60} width={60} />
+>>>>>>> 372e3bc1481a84dc0ffee574b447818c0c2758b9
         </div>
         <Button variant="brand" className="mx-4 mb-2 justify-start gap-2">
           <Plus className="h-4 w-4" />
@@ -89,6 +96,7 @@ export function DashboardSidebar() {
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
+<<<<<<< HEAD
             <SidebarMenuItem>
               <SidebarMenuButton asChild isActive={pathname === "/learn"} tooltip="Learn">
                 <Link href="/learn">
@@ -97,6 +105,9 @@ export function DashboardSidebar() {
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
+=======
+           
+>>>>>>> 372e3bc1481a84dc0ffee574b447818c0c2758b9
           </SidebarMenu>
         </SidebarGroup>
 

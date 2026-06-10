@@ -1,6 +1,10 @@
-import React from 'react'
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { ArrowUpRight } from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
 
-const page = () => {
+export default function Home() {
   return (
     <div className=" z-20 flex flex-col items-center justify-start min-h-screen py-2 mt-10">
       
