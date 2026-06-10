@@ -7,13 +7,19 @@ import type { TemplateFolder } from "@/features/playground/libs/path-to-json"
 import { transformToWebContainerFormat } from "../hooks/transformer"
 import { CheckCircle, Loader2, XCircle } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
+import { WebContainer } from "@webcontainer/api"
 
 interface WebContainerPreviewProps {
-  templateData: TemplateFolder
+  templateData: TemplateFolder;
+  serverUrl: string,
+  isLoading: boolean,
+  error: string | null,
+  instance: WebContainer | null,
+  writeFileSync: (path: string, content: string) => Promise<void>
 }
 
-const WebContainerPreview: React.FC<WebContainerPreviewProps> = ({ templateData }) => {
-  const { serverUrl, isLoading, error, instance } = useWebContainer({ templateData })
+const WebContainerPreview: React.FC<WebContainerPreviewProps> = ({ templateData ,error,instance,isLoading,serverUrl,writeFileSync }) => {
+ 
   const [previewUrl, setPreviewUrl] = useState<string>("")
   const [loadingState, setLoadingState] = useState({
     transforming: false,

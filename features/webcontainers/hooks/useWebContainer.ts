@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { WebContainer } from '@webcontainer/api';
 import { TemplateFolder } from '@/features/playground/libs/path-to-json';
 
@@ -11,6 +11,7 @@ interface UseWebContainerReturn {
   isLoading: boolean;
   error: string | null;
   instance: WebContainer | null;
+  writeFileSync: (path: string, content: string) => Promise<void>;
 }
 
 export const useWebContainer = ({ templateData }: UseWebContainerProps): UseWebContainerReturn => {
@@ -49,5 +50,19 @@ export const useWebContainer = ({ templateData }: UseWebContainerProps): UseWebC
     };
   }, []);
 
-  return { serverUrl, isLoading, error, instance };
+  const writeFileSync = useCallback(async (path: string, content: string): Promise<void> => {
+    if (!instance) {
+      throw new Error('WebContainer instance is not available');
+    }
+
+    try {
+      await instance.fs.writeFile(path, content);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to write file';
+      console.error(`Failed to write file at ${path}:`, err);
+      throw new Error(`Failed to write file at ${path}: ${errorMessage}`);
+    }
+  }, [instance]);
+
+  return { serverUrl, isLoading, error, instance, writeFileSync };
 };

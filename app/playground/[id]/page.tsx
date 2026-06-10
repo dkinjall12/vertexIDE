@@ -19,12 +19,11 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import WebContainerPreview from "@/features/webcontainers/components/webcontainer-preveiw";
-
+import { useWebContainer } from "@/features/webcontainers/hooks/useWebContainer";
 
 interface PlaygroundData {
   id: string;
   name?: string;
-  // Add other relevant playground metadata fields
   [key: string]: any;
 }
 
@@ -33,15 +32,35 @@ export interface TemplateFolder {
   items: (TemplateFile | TemplateFolder)[];
 }
 
+// Helper: Find file path in the tree, returns relative path as string
+function findFilePath(
+  file: TemplateFile,
+  folder: TemplateFolder,
+  pathSoFar: string[] = []
+): string | null {
+  for (const item of folder.items) {
+    if ("folderName" in item) {
+      const res = findFilePath(file, item, [...pathSoFar, item.folderName]);
+      if (res) return res;
+    } else {
+      if (
+        item.filename === file.filename &&
+        item.fileExtension === file.fileExtension
+      ) {
+        return [
+          ...pathSoFar,
+          item.filename + (item.fileExtension ? "." + item.fileExtension : ""),
+        ].join("/");
+      }
+    }
+  }
+  return null;
+}
 interface LoadingStepProps {
   currentStep: number;
   step: number;
   label: string;
 }
-
-/**
- * Component to render a loading step indicator
- */
 const LoadingStep: React.FC<LoadingStepProps> = ({
   currentStep,
   step,
@@ -91,86 +110,59 @@ const LoadingStep: React.FC<LoadingStepProps> = ({
   </div>
 );
 
-/**
- * Main playground page component
- */
 const MainPlaygroundPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+
   const [selectedFile, setSelectedFile] = useState<TemplateFile | null>(null);
-  const [playgroundData, setPlaygroundData] = useState<PlaygroundData | null>(
-    null
-  );
+  const [playgroundData, setPlaygroundData] = useState<PlaygroundData | null>(null);
   const [templateData, setTemplateData] = useState<TemplateFolder | null>(null);
   const [loadingStep, setLoadingStep] = useState<number>(1);
   const [error, setError] = useState<string | null>(null);
   const [editorContent, setEditorContent] = useState<string>("");
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<Monaco | null>(null);
+   const { serverUrl, isLoading, error:containerError, instance ,writeFileSync} = useWebContainer({ templateData })
+ 
 
-  /**
-   * Fetch playground metadata
-   */
-const fetchPlaygroundTemplateData = async () => {
-  if (!id) return;
-
-  try {
-    setLoadingStep(1);
-    setError(null);
-
-    const data = await getPlaygroundById(id);
-    // @ts-ignore
-    setPlaygroundData(data);
-
-    const rawContent = data?.templateFiles?.[0]?.content;
-
-    if (rawContent) {
-      // 1. Parse the JSON string from DB
-      // @ts-ignore
-      const parsedContent = JSON.parse(rawContent);
-
-      // 2. Set it directly as template data
-      setTemplateData(parsedContent);
-
-      setLoadingStep(3);
-      toast.success("Loaded template from saved content");
-      return;
+  // --- Fetch playground metadata and template
+  const fetchPlaygroundTemplateData = async () => {
+    if (!id) return;
+    try {
+      setLoadingStep(1);
+      setError(null);
+      const data = await getPlaygroundById(id);
+      setPlaygroundData(data);
+      const rawContent = data?.templateFiles?.[0]?.content;
+      if (rawContent) {
+        const parsedContent = JSON.parse(rawContent);
+        setTemplateData(parsedContent);
+        setLoadingStep(3);
+        toast.success("Loaded template from saved content");
+        return;
+      }
+      setLoadingStep(2);
+      toast.success("Playground metadata loaded");
+      await loadTemplate();
+    } catch (error) {
+      console.error("Error loading playground:", error);
+      setError("Failed to load playground data");
+      toast.error("Failed to load playground data");
     }
+  };
 
-    setLoadingStep(2);
-    toast.success("Playground metadata loaded");
-    await loadTemplate(); // No template in DB, fetch from API
-  } catch (error) {
-    console.error("Error loading playground:", error);
-    setError("Failed to load playground data");
-    toast.error("Failed to load playground data");
-  }
-};
-
-
-  /**
-   * Load template data from API
-   */
   const loadTemplate = async () => {
     if (!id) return;
-
     try {
       setLoadingStep(2);
       const res = await fetch(`/api/template/${id}`);
-      if (!res.ok) {
-        throw new Error(`Failed to load template: ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`Failed to load template: ${res.status}`);
       const data = await res.json();
-
-      // The template data needs to be a single root item for TemplateFileTree
-      // Format data correctly based on the expected structure
       if (data.templateJson && Array.isArray(data.templateJson)) {
-        // If it's an array, wrap it in a root folder
         setTemplateData({
           folderName: "Root",
           items: data.templateJson,
         });
       } else {
-        // Otherwise use as-is
         setTemplateData(
           data.templateJson || {
             folderName: "Root",
@@ -178,8 +170,7 @@ const fetchPlaygroundTemplateData = async () => {
           }
         );
       }
-
-      setLoadingStep(3); // Loading complete
+      setLoadingStep(3);
       toast.success("Template loaded successfully");
     } catch (error) {
       console.error("Error loading template:", error);
@@ -188,139 +179,94 @@ const fetchPlaygroundTemplateData = async () => {
     }
   };
 
-  // Initial data fetch
   useEffect(() => {
-    if (id) {
-      fetchPlaygroundTemplateData();
-    }
+    if (id) fetchPlaygroundTemplateData();
   }, [id]);
 
-  // Load template once playground data is available
   useEffect(() => {
     if (playgroundData && id && playgroundData.templateFiles?.length < 0) {
       loadTemplate();
     }
   }, [playgroundData, id]);
 
-  // Update editor content when selected file changes
   useEffect(() => {
     if (selectedFile) {
       setEditorContent(selectedFile.content || "");
-      // Update language when file changes
       if (monacoRef.current && editorRef.current) {
         updateEditorLanguage();
       }
     }
   }, [selectedFile]);
 
-  /**
-   * Handle file selection
-   */
   const handleFileSelect = (file: TemplateFile) => {
     if (!file) return;
     setSelectedFile(file);
     toast.info(`Opened ${file.filename}.${file.fileExtension}`);
   };
 
-  /**
-   * Handle adding a new file
-   */
   const handleAddFile = (newFile: TemplateFile, parentPath: string) => {
     if (!templateData) return;
-
-    // Create a deep copy of the template data
     const updatedTemplateData = JSON.parse(
       JSON.stringify(templateData)
     ) as TemplateFolder;
-
-    // If adding to root
     if (!parentPath) {
       updatedTemplateData.items.push(newFile);
       setTemplateData(updatedTemplateData);
       toast.success(
         `Created file: ${newFile.filename}.${newFile.fileExtension}`
       );
+      setSelectedFile(newFile);
       return;
     }
-
-    // Find the parent folder by path
     const pathParts = parentPath.split("/");
     let currentFolder = updatedTemplateData;
-
-    // Navigate to the parent folder
     for (const part of pathParts) {
       const folder = currentFolder.items.find(
         (item) => "folderName" in item && item.folderName === part
       ) as TemplateFolder | undefined;
-
       if (!folder) {
         toast.error(`Folder not found: ${part}`);
         return;
       }
-
       currentFolder = folder;
     }
-
-    // Add the new file to the parent folder
     currentFolder.items.push(newFile);
     setTemplateData(updatedTemplateData);
     toast.success(`Created file: ${newFile.filename}.${newFile.fileExtension}`);
-
-    // Select the newly created file
     setSelectedFile(newFile);
   };
 
-  /**
-   * Handle adding a new folder
-   */
   const handleAddFolder = (newFolder: TemplateFolder, parentPath: string) => {
     if (!templateData) return;
-
-    // Create a deep copy of the template data
     const updatedTemplateData = JSON.parse(
       JSON.stringify(templateData)
     ) as TemplateFolder;
-
-    // If adding to root
     if (!parentPath) {
       updatedTemplateData.items.push(newFolder);
       setTemplateData(updatedTemplateData);
       toast.success(`Created folder: ${newFolder.folderName}`);
       return;
     }
-
-    // Find the parent folder by path
     const pathParts = parentPath.split("/");
     let currentFolder = updatedTemplateData;
-
-    // Navigate to the parent folder
     for (const part of pathParts) {
       const folder = currentFolder.items.find(
         (item) => "folderName" in item && item.folderName === part
       ) as TemplateFolder | undefined;
-
       if (!folder) {
         toast.error(`Folder not found: ${part}`);
         return;
       }
-
       currentFolder = folder;
     }
-
-    // Add the new folder to the parent folder
     currentFolder.items.push(newFolder);
     setTemplateData(updatedTemplateData);
     toast.success(`Created folder: ${newFolder.folderName}`);
   };
 
-  /**
-   * Handle editor mount
-   */
   const handleEditorDidMount = (editor: any, monaco: Monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
-
-    // Configure editor settings
     editor.updateOptions({
       fontSize: 14,
       minimap: { enabled: true },
@@ -330,8 +276,6 @@ const fetchPlaygroundTemplateData = async () => {
       lineNumbers: "on",
       wordWrap: "on",
     });
-
-    // Define a v0-like theme (dark with subtle syntax colors)
     monaco.editor.defineTheme("v0-dark", {
       base: "vs-dark",
       inherit: true,
@@ -357,34 +301,20 @@ const fetchPlaygroundTemplateData = async () => {
         "editor.inactiveSelectionBackground": "#3A3D41",
       },
     });
-
-    // Apply the custom theme
     monaco.editor.setTheme("v0-dark");
-
-    // Set up language detection based on file extension
     updateEditorLanguage();
   };
 
-  /**
-   * Update editor language based on file extension
-   */
   const updateEditorLanguage = () => {
     if (!selectedFile || !monacoRef.current || !editorRef.current) return;
-
-    const extension = selectedFile.fileExtension.toLowerCase();
+    const extension = selectedFile.fileExtension?.toLowerCase() ?? "";
     let language = "plaintext";
-
-    // Map common extensions to Monaco languages
     switch (extension) {
       case "js":
-        language = "javascript";
-        break;
       case "jsx":
         language = "javascript";
         break;
       case "ts":
-        language = "typescript";
-        break;
       case "tsx":
         language = "typescript";
         break;
@@ -456,66 +386,98 @@ const fetchPlaygroundTemplateData = async () => {
       default:
         language = "plaintext";
     }
-
-    // Set the language for syntax highlighting
     monacoRef.current.editor.setModelLanguage(
       editorRef.current.getModel(),
       language
     );
   };
 
-  /**
-   * Handle content change in the editor
-   */
   const handleEditorChange = (value: string | undefined) => {
     if (value !== undefined) {
       setEditorContent(value);
     }
   };
 
-  // Add keyboard event listener for CTRL + S
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "s") {
-        event.preventDefault(); // Prevent browser's save dialog
+        event.preventDefault();
         handleSave();
       }
     };
-
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedFile, editorContent]); // Dependencies for handleSave
+  }, [selectedFile, editorContent, templateData]);
 
-  /**
-   * Handle save action
-   */
+  // --- SAVE handler: update file, sync with webcontainer, then persist
+ const handleSave = async () => {
+  if (!selectedFile || !templateData) return;
 
-  // *Handle Save use to save whatever written in JSON
-  const handleSave = async () => {
-    if (!selectedFile || !editorContent) return;
+  try {
+    // Deep clone templateData to avoid direct state mutation
+    const updatedTemplateData: TemplateFolder = JSON.parse(
+      JSON.stringify(templateData)
+    );
 
-    try {
-      // Update the selected file content
-      if (selectedFile) {
-        selectedFile.content = editorContent;
-        setSelectedFile({ ...selectedFile });
-      }
+    // Helper: Recursively find and update the selected file
+    const updateFileContent = (items: (TemplateFile | TemplateFolder)[]) => {
+      return items.map((item) => {
+        if ("folderName" in item) {
+          // Recurse into folder
+          return {
+            ...item,
+            items: updateFileContent(item.items),
+          };
+        } else {
+          if (
+            item.filename === selectedFile.filename &&
+            item.fileExtension === selectedFile.fileExtension
+          ) {
+            // Match by filename + extension instead of reference
+            return {
+              ...item,
+              content: editorContent,
+            };
+          }
+          return item;
+        }
+      });
+    };
 
-      // Show success message
-      toast.success(
-        `Saved ${selectedFile.filename}.${selectedFile.fileExtension}`
-      );
+    // Apply the update
+    updatedTemplateData.items = updateFileContent(updatedTemplateData.items);
+    setTemplateData(updatedTemplateData);
 
-      // Save the entire updated FileSystemItem
-     let res =  await SaveUpdatedCode(id , templateData!);
-     console.log(res)
-    } catch (error) {
-      console.error("Error saving file:", error);
-      toast.error("Failed to save file");
+    // Find path based on updated data
+    const path = findFilePath(selectedFile, updatedTemplateData);
+    if (!path) {
+      toast.error("Could not determine file path for webcontainer sync.");
+      return;
     }
-  };
 
-  // Error state
+    // Sync to WebContainer virtual filesystem
+    await writeFileSync(path, editorContent);
+
+    // Save updated structure to backend
+    await SaveUpdatedCode(id, updatedTemplateData);
+
+    setSelectedFile({ ...updatedTemplateData.items.find((item) => {
+      if ("filename" in item) {
+        return (
+          item.filename === selectedFile.filename &&
+          item.fileExtension === selectedFile.fileExtension
+        );
+      }
+      return false;
+    }) as TemplateFile });
+
+    toast.success(`Saved ${selectedFile.filename}.${selectedFile.fileExtension}`);
+  } catch (error) {
+    console.error("Error saving file:", error);
+    toast.error("Failed to save file");
+  }
+};
+
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] p-4">
@@ -537,7 +499,6 @@ const fetchPlaygroundTemplateData = async () => {
     );
   }
 
-  // Loading state
   if (loadingStep < 3) {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] p-4">
@@ -545,7 +506,6 @@ const fetchPlaygroundTemplateData = async () => {
           <h2 className="text-xl font-semibold mb-6 text-center">
             Loading Playground
           </h2>
-
           <div className="mb-8">
             <LoadingStep
               currentStep={loadingStep}
@@ -563,7 +523,6 @@ const fetchPlaygroundTemplateData = async () => {
               label="Ready to explore"
             />
           </div>
-
           <div className="w-full h-2 rounded-full overflow-hidden">
             <div
               className="bg-red-600 h-full transition-all duration-300 ease-in-out"
@@ -575,7 +534,6 @@ const fetchPlaygroundTemplateData = async () => {
     );
   }
 
-  // Template data is empty or invalid
   if (!templateData) {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] p-4">
@@ -596,7 +554,6 @@ const fetchPlaygroundTemplateData = async () => {
     );
   }
 
-  // Main playground view
   return (
     <>
       <TemplateFileTree
@@ -685,10 +642,15 @@ const fetchPlaygroundTemplateData = async () => {
                   // Don't set defaultLanguage here, we'll set it dynamically in updateEditorLanguage
                 />
               </ResizablePanel>
-
               <ResizableHandle />
               <ResizablePanel>
-                <WebContainerPreview templateData={templateData} />
+                <WebContainerPreview templateData={templateData} 
+                error={containerError}
+                instance={instance}
+                isLoading={isLoading}
+                serverUrl={serverUrl!}
+                writeFileSync={writeFileSync}
+                />
               </ResizablePanel>
             </ResizablePanelGroup>
           ) : (
