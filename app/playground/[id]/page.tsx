@@ -7,7 +7,10 @@ import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { TemplateFileTree } from "@/features/playground/components/playground-explorer";
 import type { TemplateFile } from "@/features/playground/libs/path-to-json";
 import { useParams } from "next/navigation";
-import { getPlaygroundById, SaveUpdatedCode } from "@/features/playground/actions";
+import {
+  getPlaygroundById,
+  SaveUpdatedCode,
+} from "@/features/playground/actions";
 import { toast } from "sonner";
 import { Loader2, FileText, FolderOpen, AlertCircle, Save } from "lucide-react";
 import Editor, { type Monaco } from "@monaco-editor/react";
@@ -20,6 +23,12 @@ import {
 } from "@/components/ui/resizable";
 import WebContainerPreview from "@/features/webcontainers/components/webcontainer-preveiw";
 import { useWebContainer } from "@/features/webcontainers/hooks/useWebContainer";
+import { findFilePath } from "@/features/playground/libs";
+import LoadingStep from "@/components/ui/loader";
+import {
+  configureMonaco,
+  defaultEditorOptions,
+} from "@/features/playground/libs/editor-config"; // Adjust path accordingly
 
 interface PlaygroundData {
   id: string;
@@ -33,88 +42,14 @@ export interface TemplateFolder {
 }
 
 // Helper: Find file path in the tree, returns relative path as string
-function findFilePath(
-  file: TemplateFile,
-  folder: TemplateFolder,
-  pathSoFar: string[] = []
-): string | null {
-  for (const item of folder.items) {
-    if ("folderName" in item) {
-      const res = findFilePath(file, item, [...pathSoFar, item.folderName]);
-      if (res) return res;
-    } else {
-      if (
-        item.filename === file.filename &&
-        item.fileExtension === file.fileExtension
-      ) {
-        return [
-          ...pathSoFar,
-          item.filename + (item.fileExtension ? "." + item.fileExtension : ""),
-        ].join("/");
-      }
-    }
-  }
-  return null;
-}
-interface LoadingStepProps {
-  currentStep: number;
-  step: number;
-  label: string;
-}
-const LoadingStep: React.FC<LoadingStepProps> = ({
-  currentStep,
-  step,
-  label,
-}) => (
-  <div className="flex items-center gap-2 mb-2 justify-center h-screen">
-    <div
-      className={`rounded-full p-1 ${
-        currentStep === step
-          ? "bg-red-100"
-          : currentStep > step
-          ? "bg-green-100"
-          : "bg-gray-100"
-      }`}
-    >
-      {currentStep > step ? (
-        <svg
-          className="h-4 w-4 text-green-500"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M5 13l4 4L19 7"
-          />
-        </svg>
-      ) : currentStep === step ? (
-        <Loader2 className="h-4 w-4 text-red-500 animate-spin" />
-      ) : (
-        <div className="h-4 w-4 rounded-full bg-gray-300" />
-      )}
-    </div>
-    <span
-      className={`text-sm ${
-        currentStep === step
-          ? "text-red-600 font-medium"
-          : currentStep > step
-          ? "text-green-600"
-          : "text-gray-500"
-      }`}
-    >
-      {label}
-    </span>
-  </div>
-);
 
 const MainPlaygroundPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
 
   const [selectedFile, setSelectedFile] = useState<TemplateFile | null>(null);
-  const [playgroundData, setPlaygroundData] = useState<PlaygroundData | null>(null);
+  const [playgroundData, setPlaygroundData] = useState<PlaygroundData | null>(
+    null
+  );
   const [templateData, setTemplateData] = useState<TemplateFolder | null>(null);
   const [loadingStep, setLoadingStep] = useState<number>(1);
   const [error, setError] = useState<string | null>(null);
@@ -122,9 +57,8 @@ const MainPlaygroundPage: React.FC = () => {
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<Monaco | null>(null);
    const { serverUrl, isLoading, error:containerError, instance ,writeFileSync} = useWebContainer({ templateData })
- 
 
-  // --- Fetch playground metadata and template
+  //* +++++++++++++++++++++++ Fetch playground metadata and template ++++++++++++++++++++++++++++++
   const fetchPlaygroundTemplateData = async () => {
     if (!id) return;
     try {
@@ -133,7 +67,7 @@ const MainPlaygroundPage: React.FC = () => {
       const data = await getPlaygroundById(id);
       setPlaygroundData(data);
       const rawContent = data?.templateFiles?.[0]?.content;
-      if (rawContent) {
+      if (typeof rawContent === "string") {
         const parsedContent = JSON.parse(rawContent);
         setTemplateData(parsedContent);
         setLoadingStep(3);
@@ -198,10 +132,12 @@ const MainPlaygroundPage: React.FC = () => {
     }
   }, [selectedFile]);
 
+  //! +++++++++++++++++++++++ Fetch playground metadata and template end Here ++++++++++++++++++++++++++++++
+
+  // * +++++++++++++++++++++++ File Management ++++++++++++++++++++++++++++++
   const handleFileSelect = (file: TemplateFile) => {
     if (!file) return;
     setSelectedFile(file);
-    toast.info(`Opened ${file.filename}.${file.fileExtension}`);
   };
 
   const handleAddFile = (newFile: TemplateFile, parentPath: string) => {
@@ -263,46 +199,14 @@ const MainPlaygroundPage: React.FC = () => {
     setTemplateData(updatedTemplateData);
     toast.success(`Created folder: ${newFolder.folderName}`);
   };
+  // ! +++++++++++++++++++++++++++ Fetch File Management Ends Here +++++++++++++++++++++++++++++++
 
   const handleEditorDidMount = (editor: any, monaco: Monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
-    editor.updateOptions({
-      fontSize: 14,
-      minimap: { enabled: true },
-      scrollBeyondLastLine: false,
-      automaticLayout: true,
-      folding: true,
-      lineNumbers: "on",
-      wordWrap: "on",
-    });
-    monaco.editor.defineTheme("v0-dark", {
-      base: "vs-dark",
-      inherit: true,
-      rules: [
-        { token: "comment", foreground: "6A9955" },
-        { token: "keyword", foreground: "C586C0" },
-        { token: "string", foreground: "CE9178" },
-        { token: "number", foreground: "B5CEA8" },
-        { token: "regexp", foreground: "D16969" },
-        { token: "type", foreground: "4EC9B0" },
-        { token: "class", foreground: "4EC9B0" },
-        { token: "function", foreground: "DCDCAA" },
-        { token: "variable", foreground: "9CDCFE" },
-        { token: "variable.predefined", foreground: "4FC1FF" },
-      ],
-      colors: {
-        "editor.background": "#1E1E1E",
-        "editor.foreground": "#D4D4D4",
-        "editorCursor.foreground": "#AEAFAD",
-        "editor.lineHighlightBackground": "#2D2D30",
-        "editorLineNumber.foreground": "#858585",
-        "editor.selectionBackground": "#264F78",
-        "editor.inactiveSelectionBackground": "#3A3D41",
-      },
-    });
-    monaco.editor.setTheme("v0-dark");
-    updateEditorLanguage();
+    editor.updateOptions(defaultEditorOptions);
+    configureMonaco(monaco);
+    updateEditorLanguage(); // Re-add this to set correct language
   };
 
   const updateEditorLanguage = () => {
@@ -409,74 +313,83 @@ const MainPlaygroundPage: React.FC = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedFile, editorContent, templateData]);
 
-  // --- SAVE handler: update file, sync with webcontainer, then persist
- const handleSave = async () => {
-  if (!selectedFile || !templateData) return;
+  // *--- SAVE handler: update file, sync with webcontainer, then persist
+  const handleSave = async () => {
+    if (!selectedFile || !templateData) return;
 
-  try {
-    // Deep clone templateData to avoid direct state mutation
-    const updatedTemplateData: TemplateFolder = JSON.parse(
-      JSON.stringify(templateData)
-    );
+    try {
+      const updatedTemplateData: TemplateFolder = JSON.parse(
+        JSON.stringify(templateData)
+      );
 
-    // Helper: Recursively find and update the selected file
-    const updateFileContent = (items: (TemplateFile | TemplateFolder)[]) => {
-      return items.map((item) => {
-        if ("folderName" in item) {
-          // Recurse into folder
-          return {
-            ...item,
-            items: updateFileContent(item.items),
-          };
-        } else {
-          if (
+      const updateFileContent = (
+        items: (TemplateFile | TemplateFolder)[]
+      ): (TemplateFile | TemplateFolder)[] => {
+        return items.map((item) => {
+          if ("folderName" in item) {
+            return {
+              ...item,
+              items: updateFileContent(item.items),
+            };
+          } else {
+            if (
+              item.filename === selectedFile.filename &&
+              item.fileExtension === selectedFile.fileExtension
+            ) {
+              return {
+                ...item,
+                content: editorContent,
+              };
+            }
+            return item;
+          }
+        });
+      };
+
+      updatedTemplateData.items = updateFileContent(updatedTemplateData.items);
+      setTemplateData(updatedTemplateData);
+
+      const findFile = (
+        items: (TemplateFile | TemplateFolder)[]
+      ): TemplateFile | null => {
+        for (const item of items) {
+          if ("folderName" in item) {
+            const found = findFile(item.items);
+            if (found) return found;
+          } else if (
             item.filename === selectedFile.filename &&
             item.fileExtension === selectedFile.fileExtension
           ) {
-            // Match by filename + extension instead of reference
-            return {
-              ...item,
-              content: editorContent,
-            };
+            return item;
           }
-          return item;
         }
-      });
-    };
+        return null;
+      };
 
-    // Apply the update
-    updatedTemplateData.items = updateFileContent(updatedTemplateData.items);
-    setTemplateData(updatedTemplateData);
-
-    // Find path based on updated data
-    const path = findFilePath(selectedFile, updatedTemplateData);
-    if (!path) {
-      toast.error("Could not determine file path for webcontainer sync.");
-      return;
-    }
-
-    // Sync to WebContainer virtual filesystem
-    await writeFileSync(path, editorContent);
-
-    // Save updated structure to backend
-    await SaveUpdatedCode(id, updatedTemplateData);
-
-    setSelectedFile({ ...updatedTemplateData.items.find((item) => {
-      if ("filename" in item) {
-        return (
-          item.filename === selectedFile.filename &&
-          item.fileExtension === selectedFile.fileExtension
-        );
+      const updatedFile = findFile(updatedTemplateData.items);
+      if (updatedFile) {
+        setSelectedFile(updatedFile);
+      } else {
+        toast.error("Failed to update selected file after saving.");
       }
-      return false;
-    }) as TemplateFile });
 
-    toast.success(`Saved ${selectedFile.filename}.${selectedFile.fileExtension}`);
-  } catch (error) {
-    console.error("Error saving file:", error);
-    toast.error("Failed to save file");
-  }
-};
+      const path = findFilePath(selectedFile, updatedTemplateData);
+      if (!path) {
+        toast.error("Could not determine file path for webcontainer sync.");
+        return;
+      }
+
+      await writeFileSync(path, editorContent);
+      await SaveUpdatedCode(id, updatedTemplateData);
+
+      toast.success(
+        `Saved ${selectedFile.filename}.${selectedFile.fileExtension}`
+      );
+    } catch (error) {
+      console.error("Error saving file:", error);
+      toast.error("Failed to save file");
+    }
+  };
 
   if (error) {
     return (
@@ -644,12 +557,13 @@ const MainPlaygroundPage: React.FC = () => {
               </ResizablePanel>
               <ResizableHandle />
               <ResizablePanel>
-                <WebContainerPreview templateData={templateData} 
-                error={containerError}
-                instance={instance}
-                isLoading={isLoading}
-                serverUrl={serverUrl!}
-                writeFileSync={writeFileSync}
+                <WebContainerPreview
+                  templateData={templateData}
+                  error={containerError!}
+                  instance={instance!}
+                  isLoading={isLoading}
+                  serverUrl={serverUrl!}
+                  writeFileSync={writeFileSync}
                 />
               </ResizablePanel>
             </ResizablePanelGroup>

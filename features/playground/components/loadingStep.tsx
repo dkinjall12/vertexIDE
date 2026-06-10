@@ -1,11 +1,7 @@
 import { Loader2 } from "lucide-react";
+import { type LoadingStepProps } from "../types";
 
-interface LoadingStepProps {
-  currentStep: number;
-  step: number;
-  label: string;
-}
-const LoadingStep: React.FC<LoadingStepProps> = ({
+export const LoadingStep: React.FC<LoadingStepProps> = ({
   currentStep,
   step,
   label,
@@ -53,5 +49,3 @@ const LoadingStep: React.FC<LoadingStepProps> = ({
     </span>
   </div>
 );
-
-export default LoadingStep;
