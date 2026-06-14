@@ -13,7 +13,7 @@ import AddNewButton from "@/features/dashboard/components/add-new-btn";
 import AddRepo from "@/features/dashboard/components/add-repo";
 
 import ProjectTable from "@/features/dashboard/components/project-table";
-import { getAllPlaygroundForUser } from "@/features/playground/actions";
+import { getAllPlaygroundForUser , deleteProjectById ,editProjectById , duplicateProjectById} from "@/features/playground/actions";
 
 const DashboardMainPage = async () => {
   const playgrounds = await getAllPlaygroundForUser();
@@ -26,7 +26,7 @@ const DashboardMainPage = async () => {
       </div>
       <div className="mt-10 flex flex-col justify-center items-center w-full">
         {/* @ts-ignore */}
-        <ProjectTable projects={playgrounds || []} />
+        <ProjectTable projects={playgrounds || []} onDeleteProject={  deleteProjectById} onUpdateProject={editProjectById} onDuplicateProject={duplicateProjectById}/>
       </div>
     
     </div>
