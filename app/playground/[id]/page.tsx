@@ -120,6 +120,7 @@ const MainPlaygroundPage: React.FC = () => {
     instance,
     writeFileSync
   } = useWebContainer({
+    // @ts-ignore
     templateData: templateData,
   })
   
@@ -184,6 +185,7 @@ const MainPlaygroundPage: React.FC = () => {
       setError(null)
       
       const data = await getPlaygroundById(id)
+      // @ts-ignore
       setPlaygroundData(data)
       
       const rawContent = data?.templateFiles?.[0]?.content
