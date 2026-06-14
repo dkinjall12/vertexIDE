@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Separator } from "@/components/ui/separator"
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { TemplateFileTree } from "@/features/playground/components/playground-explorer"
@@ -9,7 +9,18 @@ import type { TemplateFile } from "@/features/playground/libs/path-to-json"
 import { useParams } from "next/navigation"
 import { getPlaygroundById, SaveUpdatedCode } from "@/features/playground/actions"
 import { toast } from "sonner"
-import { FileText, FolderOpen, AlertCircle, Save, X, Settings } from "lucide-react"
+import { 
+  FileText, 
+  FolderOpen, 
+  AlertCircle, 
+  Save, 
+  X, 
+  Settings, 
+  Play, 
+  RefreshCw,
+  Loader2,
+  CheckCircle
+} from "lucide-react"
 import Editor, { type Monaco } from "@monaco-editor/react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -31,14 +42,16 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import WebContainerPreview from "@/features/webcontainers/components/webcontainer-preveiw"
-import { useWebContainer } from "@/features/webcontainers/hooks/useWebContainer"
-import { findFilePath } from "@/features/playground/libs"
+import TerminalComponent from "@/features/webcontainers/components/terminal"
 import LoadingStep from "@/components/ui/loader"
 import { configureMonaco, defaultEditorOptions, getEditorLanguage } from "@/features/playground/libs/editor-config"
 import dynamic from "next/dynamic"
+import { findFilePath } from "@/features/playground/libs"
+import { useWebContainer } from "@/features/webcontainers/hooks/useWebContainer"
+import { TemplateFolder } from "@/features/playground/libs/path-to-json"
 
-// Dynamically import Terminal component to avoid SSR issues
-const TerminalComponent = dynamic(() => import("@/features/webcontainers/components/terminal"), {
+// Dynamic imports for components that don't need SSR
+const TerminalAsync = dynamic(() => import("@/features/webcontainers/components/terminal"), {
   ssr: false,
   loading: () => (
     <div className="flex items-center justify-center h-full text-muted-foreground">Loading terminal...</div>
@@ -49,11 +62,6 @@ interface PlaygroundData {
   id: string
   name?: string
   [key: string]: any
-}
-
-export interface TemplateFolder {
-  folderName: string
-  items: (TemplateFile | TemplateFolder)[]
 }
 
 interface OpenFile extends TemplateFile {
@@ -73,18 +81,18 @@ interface ConfirmationDialog {
 
 const MainPlaygroundPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
-
+  
   // Core state
   const [playgroundData, setPlaygroundData] = useState<PlaygroundData | null>(null)
   const [templateData, setTemplateData] = useState<TemplateFolder | null>(null)
   const [loadingStep, setLoadingStep] = useState<number>(1)
   const [error, setError] = useState<string | null>(null)
-
+  
   // Multi-file editor state
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([])
   const [activeFileId, setActiveFileId] = useState<string | null>(null)
   const [editorContent, setEditorContent] = useState<string>("")
-
+  
   // UI state
   const [confirmationDialog, setConfirmationDialog] = useState<ConfirmationDialog>({
     isOpen: false,
@@ -95,95 +103,89 @@ const MainPlaygroundPage: React.FC = () => {
   })
   const [isTerminalVisible, setIsTerminalVisible] = useState(false)
   const [isPreviewVisible, setIsPreviewVisible] = useState(true)
-
+  const [isRunning, setIsRunning] = useState(false)
+  
   // Refs
   const editorRef = useRef<any>(null)
   const monacoRef = useRef<Monaco | null>(null)
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastSyncedContent = useRef<Map<string, string>>(new Map())
-
-  // Memoize templateData to prevent unnecessary WebContainer reinitializations
-  const stableTemplateData = useMemo(() => templateData, [templateData])
-
+  
+  // WebContainer hook - simplified without file syncing
   const {
     serverUrl,
-    isLoading,
+    isLoading: containerLoading,
     error: containerError,
     instance,
-    writeFileSync,
+    writeFileSync
   } = useWebContainer({
-    // @ts-ignore
-    templateData: stableTemplateData,
+    templateData: templateData,
   })
-
+  
   // Helper function to generate unique file ID
-  const generateFileId = (file: TemplateFile): string => {
+  const generateFileId = useCallback((file: TemplateFile): string => {
     return `${file.filename}.${file.fileExtension}`
-  }
-
+  }, [])
+  
   // Get active file
   const activeFile = openFiles.find((file) => file.id === activeFileId)
-
+  
   // Check if there are any unsaved changes
   const hasUnsavedChanges = openFiles.some((file) => file.hasUnsavedChanges)
-
+  
   // Debounced sync to WebContainer
-  const syncToWebContainer = useCallback(
-    async (file: OpenFile) => {
-      if (!templateData || !writeFileSync) return
-
-      const path = findFilePath(file, templateData)
-      if (!path) return
-
-      const lastSynced = lastSyncedContent.current.get(file.id)
-      if (lastSynced === file.content) return
-
-      try {
-        await writeFileSync(path, file.content)
-        lastSyncedContent.current.set(file.id, file.content)
-        console.log(`Synced ${file.filename}.${file.fileExtension} to WebContainer`)
-      } catch (error) {
-        console.error("Failed to sync file to WebContainer:", error)
-      }
-    },
-    [templateData, writeFileSync],
-  )
-
-  // Debounced sync function
   const debouncedSync = useCallback(
     (file: OpenFile) => {
+      if (!writeFileSync || !templateData) return
+      
       if (syncTimeoutRef.current) {
         clearTimeout(syncTimeoutRef.current)
       }
-      syncTimeoutRef.current = setTimeout(() => {
-        syncToWebContainer(file)
+      
+      syncTimeoutRef.current = setTimeout(async () => {
+        try {
+          const path = findFilePath(file, templateData)
+          if (!path) {
+            console.error(`Could not find path for file: ${file.filename}.${file.fileExtension}`)
+            return
+          }
+          
+          await writeFileSync(path, file.content)
+          lastSyncedContent.current.set(file.id, file.content)
+          console.log(`✅ Synced ${file.filename}.${file.fileExtension} to WebContainer`)
+        } catch (error) {
+          console.error("Failed to sync file to WebContainer:", error)
+        }
       }, 500)
     },
-    [syncToWebContainer],
+    [templateData, writeFileSync]
   )
-
+  
   // Auto-save functionality
   const scheduleAutoSave = useCallback(() => {
     if (autoSaveTimeoutRef.current) {
       clearTimeout(autoSaveTimeoutRef.current)
     }
+    
+    if (!activeFile || !activeFile.hasUnsavedChanges) return
+    
     autoSaveTimeoutRef.current = setTimeout(() => {
-      if (activeFile && activeFile.hasUnsavedChanges) {
-        handleSave(activeFile.id)
-      }
+      handleSave(activeFile.id)
     }, 3000)
   }, [activeFile])
-
+  
   // Fetch playground data
   const fetchPlaygroundTemplateData = async () => {
     if (!id) return
+    
     try {
       setLoadingStep(1)
       setError(null)
+      
       const data = await getPlaygroundById(id)
-      // @ts-ignore
       setPlaygroundData(data)
+      
       const rawContent = data?.templateFiles?.[0]?.content
       if (typeof rawContent === "string") {
         const parsedContent = JSON.parse(rawContent)
@@ -192,6 +194,7 @@ const MainPlaygroundPage: React.FC = () => {
         toast.success("Loaded template from saved content")
         return
       }
+      
       setLoadingStep(2)
       toast.success("Playground metadata loaded")
       await loadTemplate()
@@ -201,14 +204,18 @@ const MainPlaygroundPage: React.FC = () => {
       toast.error("Failed to load playground data")
     }
   }
-
+  
   const loadTemplate = async () => {
     if (!id) return
+    
     try {
       setLoadingStep(2)
       const res = await fetch(`/api/template/${id}`)
+      
       if (!res.ok) throw new Error(`Failed to load template: ${res.status}`)
+      
       const data = await res.json()
+      
       if (data.templateJson && Array.isArray(data.templateJson)) {
         setTemplateData({
           folderName: "Root",
@@ -219,9 +226,10 @@ const MainPlaygroundPage: React.FC = () => {
           data.templateJson || {
             folderName: "Root",
             items: [],
-          },
+          }
         )
       }
+      
       setLoadingStep(3)
       toast.success("Template loaded successfully")
     } catch (error) {
@@ -230,31 +238,34 @@ const MainPlaygroundPage: React.FC = () => {
       toast.error("Failed to load template data")
     }
   }
-
+  
   // File management functions
   const openFile = (file: TemplateFile) => {
     const fileId = generateFileId(file)
     const existingFile = openFiles.find((f) => f.id === fileId)
-
+    
     if (existingFile) {
       setActiveFileId(fileId)
       setEditorContent(existingFile.content)
-    } else {
-      const newOpenFile: OpenFile = {
-        ...file,
-        id: fileId,
-        hasUnsavedChanges: false,
-        content: file.content || "",
-        originalContent: file.content || "",
-      }
-      setOpenFiles((prev) => [...prev, newOpenFile])
-      setActiveFileId(fileId)
-      setEditorContent(file.content || "")
+      return
     }
+    
+    const newOpenFile: OpenFile = {
+      ...file,
+      id: fileId,
+      hasUnsavedChanges: false,
+      content: file.content || "",
+      originalContent: file.content || "",
+    }
+    
+    setOpenFiles((prev) => [...prev, newOpenFile])
+    setActiveFileId(fileId)
+    setEditorContent(file.content || "")
   }
-
+  
   const closeFile = (fileId: string) => {
     const file = openFiles.find((f) => f.id === fileId)
+    
     if (file && file.hasUnsavedChanges) {
       setConfirmationDialog({
         isOpen: true,
@@ -274,22 +285,29 @@ const MainPlaygroundPage: React.FC = () => {
       closeFileForce(fileId)
     }
   }
-
+  
   const closeFileForce = (fileId: string) => {
     setOpenFiles((prev) => {
       const newFiles = prev.filter((f) => f.id !== fileId)
-      if (activeFileId === fileId) {
-        const newActiveFile = newFiles[newFiles.length - 1]
-        setActiveFileId(newActiveFile?.id || null)
-        setEditorContent(newActiveFile?.content || "")
+      const newActiveFile = newFiles.length > 0 ? newFiles[newFiles.length - 1] : null
+      
+      if (newActiveFile) {
+        setActiveFileId(newActiveFile.id)
+        setEditorContent(newActiveFile.content)
+      } else {
+        setActiveFileId(null)
+        setEditorContent("")
       }
+      
       return newFiles
     })
+    
     lastSyncedContent.current.delete(fileId)
   }
-
+  
   const closeAllFiles = () => {
     const unsavedFiles = openFiles.filter((f) => f.hasUnsavedChanges)
+    
     if (unsavedFiles.length > 0) {
       setConfirmationDialog({
         isOpen: true,
@@ -300,14 +318,12 @@ const MainPlaygroundPage: React.FC = () => {
           setOpenFiles([])
           setActiveFileId(null)
           setEditorContent("")
-          lastSyncedContent.current.clear()
           setConfirmationDialog((prev) => ({ ...prev, isOpen: false }))
         },
         onCancel: () => {
           setOpenFiles([])
           setActiveFileId(null)
           setEditorContent("")
-          lastSyncedContent.current.clear()
           setConfirmationDialog((prev) => ({ ...prev, isOpen: false }))
         },
       })
@@ -315,235 +331,203 @@ const MainPlaygroundPage: React.FC = () => {
       setOpenFiles([])
       setActiveFileId(null)
       setEditorContent("")
-      lastSyncedContent.current.clear()
     }
   }
-
+  
   const handleFileSelect = (file: TemplateFile) => {
     openFile(file)
   }
-
+  
   const handleAddFile = (newFile: TemplateFile, parentPath: string) => {
     if (!templateData) return
-    const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder
-
-    if (!parentPath) {
-      updatedTemplateData.items.push(newFile)
-      setTemplateData(updatedTemplateData)
-      toast.success(`Created file: ${newFile.filename}.${newFile.fileExtension}`)
-      openFile(newFile)
-      return
-    }
-
-    const pathParts = parentPath.split("/")
-    let currentFolder = updatedTemplateData
-    for (const part of pathParts) {
-      const folder = currentFolder.items.find((item) => "folderName" in item && item.folderName === part) as
-        | TemplateFolder
-        | undefined
-      if (!folder) {
-        toast.error(`Folder not found: ${part}`)
+    
+    try {
+      const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder
+      
+      if (!parentPath) {
+        updatedTemplateData.items.push(newFile)
+        setTemplateData(updatedTemplateData)
+        toast.success(`Created file: ${newFile.filename}.${newFile.fileExtension}`)
+        openFile(newFile)
         return
       }
-      currentFolder = folder
-    }
-    currentFolder.items.push(newFile)
-    setTemplateData(updatedTemplateData)
-    toast.success(`Created file: ${newFile.filename}.${newFile.fileExtension}`)
-    openFile(newFile)
-  }
-
-  const handleAddFolder = (newFolder: TemplateFolder, parentPath: string) => {
-    if (!templateData) return
-    const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder
-
-    if (!parentPath) {
-      updatedTemplateData.items.push(newFolder)
-      setTemplateData(updatedTemplateData)
-      toast.success(`Created folder: ${newFolder.folderName}`)
-      return
-    }
-
-    const pathParts = parentPath.split("/")
-    let currentFolder = updatedTemplateData
-    for (const part of pathParts) {
-      const folder = currentFolder.items.find((item) => "folderName" in item && item.folderName === part) as
-        | TemplateFolder
-        | undefined
-      if (!folder) {
-        toast.error(`Folder not found: ${part}`)
-        return
-      }
-      currentFolder = folder
-    }
-    currentFolder.items.push(newFolder)
-    setTemplateData(updatedTemplateData)
-    toast.success(`Created folder: ${newFolder.folderName}`)
-  }
-
-  const handleDeleteFile = async (file: TemplateFile, parentPath: string) => {
-    if (!templateData || !id) return
-
-    // Check if file is currently open and close it
-    const fileId = generateFileId(file)
-    const isOpen = openFiles.some((f) => f.id === fileId)
-    if (isOpen) {
-      closeFileForce(fileId)
-    }
-
-    const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder
-
-    const deleteFromItems = (items: (TemplateFile | TemplateFolder)[]): (TemplateFile | TemplateFolder)[] => {
-      return items
-        .filter((item) => {
-          if ("folderName" in item) {
-            return true // Keep folders, but process their contents
-          } else {
-            // Remove the file if it matches
-            return !(item.filename === file.filename && item.fileExtension === file.fileExtension)
-          }
-        })
-        .map((item) => {
-          if ("folderName" in item) {
-            return {
-              ...item,
-              items: deleteFromItems(item.items),
-            }
-          }
-          return item
-        })
-    }
-
-    if (!parentPath) {
-      updatedTemplateData.items = deleteFromItems(updatedTemplateData.items)
-    } else {
+      
       const pathParts = parentPath.split("/")
       let currentFolder = updatedTemplateData
+      
       for (const part of pathParts) {
-        const folder = currentFolder.items.find((item) => "folderName" in item && item.folderName === part) as
-          | TemplateFolder
-          | undefined
+        const folder = currentFolder.items.find(
+          (item) => "folderName" in item && item.folderName === part
+        ) as TemplateFolder | undefined
+        
         if (!folder) {
           toast.error(`Folder not found: ${part}`)
           return
         }
+        
         currentFolder = folder
       }
-      currentFolder.items = currentFolder.items.filter((item) => {
-        if ("folderName" in item) {
-          return true
-        } else {
-          return !(item.filename === file.filename && item.fileExtension === file.fileExtension)
-        }
-      })
-    }
-
-    try {
-      // Delete the file from WebContainer if it exists
-      if (instance) {
-        const filePath = findFilePath(file, templateData)
-        if (filePath) {
-          try {
-            // Use WebContainer's filesystem API to remove the file
-            await instance.fs.rm(filePath)
-          } catch (error) {
-            console.error("Failed to delete file from WebContainer:", error)
-          }
-        }
-      }
-
-      // Save the updated template data to the database
-      await SaveUpdatedCode(id, updatedTemplateData)
-
-      // Update local state
+      
+      currentFolder.items.push(newFile)
       setTemplateData(updatedTemplateData)
+      toast.success(`Created file: ${newFile.filename}.${newFile.fileExtension}`)
+      openFile(newFile)
+    } catch (error) {
+      console.error("Error adding file:", error)
+      toast.error("Failed to create file")
+    }
+  }
+  
+  const handleAddFolder = (newFolder: TemplateFolder, parentPath: string) => {
+    if (!templateData) return
+    
+    try {
+      const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder
+      
+      if (!parentPath) {
+        updatedTemplateData.items.push(newFolder)
+        setTemplateData(updatedTemplateData)
+        toast.success(`Created folder: ${newFolder.folderName}`)
+        return
+      }
+      
+      const pathParts = parentPath.split("/")
+      let currentFolder = updatedTemplateData
+      
+      for (const part of pathParts) {
+        const folder = currentFolder.items.find(
+          (item) => "folderName" in item && item.folderName === part
+        ) as TemplateFolder | undefined
+        
+        if (!folder) {
+          toast.error(`Folder not found: ${part}`)
+          return
+        }
+        
+        currentFolder = folder
+      }
+      
+      currentFolder.items.push(newFolder)
+      setTemplateData(updatedTemplateData)
+      toast.success(`Created folder: ${newFolder.folderName}`)
+    } catch (error) {
+      console.error("Error adding folder:", error)
+      toast.error("Failed to create folder")
+    }
+  }
+  
+  const handleDeleteFile = async (file: TemplateFile, parentPath: string) => {
+    if (!templateData || !id) return
+    
+    try {
+      const fileId = generateFileId(file)
+      const isOpen = openFiles.some((f) => f.id === fileId)
+      
+      if (isOpen) {
+        closeFileForce(fileId)
+      }
+      
+      const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder
+      
+      if (!parentPath) {
+        updatedTemplateData.items = updatedTemplateData.items.filter(
+          (item) => !("filename" in item && item.filename === file.filename && item.fileExtension === file.fileExtension)
+        )
+        setTemplateData(updatedTemplateData)
+        await SaveUpdatedCode(id, updatedTemplateData)
+        toast.success(`Deleted file: ${file.filename}.${file.fileExtension}`)
+        return
+      }
+      
+      const pathParts = parentPath.split("/")
+      let currentFolder = updatedTemplateData
+      
+      for (const part of pathParts) {
+        const folder = currentFolder.items.find(
+          (item) => "folderName" in item && item.folderName === part
+        ) as TemplateFolder | undefined
+        
+        if (!folder) {
+          toast.error(`Folder not found: ${part}`)
+          return
+        }
+        
+        currentFolder = folder
+      }
+      
+      currentFolder.items = currentFolder.items.filter(
+        (item) => !("filename" in item && item.filename === file.filename && item.fileExtension === file.fileExtension)
+      )
+      
+      setTemplateData(updatedTemplateData)
+      await SaveUpdatedCode(id, updatedTemplateData)
       toast.success(`Deleted file: ${file.filename}.${file.fileExtension}`)
     } catch (error) {
       console.error("Error deleting file:", error)
       toast.error("Failed to delete file")
     }
   }
-
+  
   const handleDeleteFolder = async (folder: TemplateFolder, parentPath: string) => {
     if (!templateData || !id) return
-
-    // Close any open files from this folder
-    const folderPath = parentPath ? `${parentPath}/${folder.folderName}` : folder.folderName
-    const filesToClose = openFiles.filter((file) => {
-      const filePath = findFilePath(file, templateData)
-      return filePath?.startsWith(folderPath)
-    })
-
-    filesToClose.forEach((file) => closeFileForce(file.id))
-
-    const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder
-
-    if (!parentPath) {
-      updatedTemplateData.items = updatedTemplateData.items.filter((item) => {
-        if ("folderName" in item) {
-          return item.folderName !== folder.folderName
-        }
-        return true
-      })
-    } else {
+    
+    try {
+      const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder
+      
+      if (!parentPath) {
+        updatedTemplateData.items = updatedTemplateData.items.filter(
+          (item) => !("folderName" in item && item.folderName === folder.folderName)
+        )
+        setTemplateData(updatedTemplateData)
+        await SaveUpdatedCode(id, updatedTemplateData)
+        toast.success(`Deleted folder: ${folder.folderName}`)
+        return
+      }
+      
       const pathParts = parentPath.split("/")
       let currentFolder = updatedTemplateData
+      
       for (const part of pathParts) {
-        const targetFolder = currentFolder.items.find((item) => "folderName" in item && item.folderName === part) as
-          | TemplateFolder
-          | undefined
+        const targetFolder = currentFolder.items.find(
+          (item) => "folderName" in item && item.folderName === part
+        ) as TemplateFolder | undefined
+        
         if (!targetFolder) {
           toast.error(`Folder not found: ${part}`)
           return
         }
+        
         currentFolder = targetFolder
       }
-      currentFolder.items = currentFolder.items.filter((item) => {
-        if ("folderName" in item) {
-          return item.folderName !== folder.folderName
-        }
-        return true
-      })
-    }
-
-    try {
-      // Delete the folder from WebContainer if it exists
-      if (instance) {
-        const folderPathInContainer = parentPath ? `${parentPath}/${folder.folderName}` : folder.folderName
-        try {
-          // Use WebContainer's filesystem API to remove the directory recursively
-          await instance.fs.rm(folderPathInContainer, { recursive: true })
-        } catch (error) {
-          console.error("Failed to delete folder from WebContainer:", error)
-        }
-      }
-
-      // Save the updated template data to the database
-      await SaveUpdatedCode(id, updatedTemplateData)
-
-      // Update local state
+      
+      currentFolder.items = currentFolder.items.filter(
+        (item) => !("folderName" in item && item.folderName === folder.folderName)
+      )
+      
       setTemplateData(updatedTemplateData)
+      await SaveUpdatedCode(id, updatedTemplateData)
       toast.success(`Deleted folder: ${folder.folderName}`)
     } catch (error) {
       console.error("Error deleting folder:", error)
       toast.error("Failed to delete folder")
     }
   }
-
+  
+  // Rename functions
   const handleRenameFile = async (
     file: TemplateFile,
     newFilename: string,
     newExtension: string,
-    parentPath: string,
+    parentPath: string
   ) => {
     if (!templateData || !id) return
-
+    
     const oldFileId = generateFileId(file)
     const newFile = { ...file, filename: newFilename, fileExtension: newExtension }
     const newFileId = generateFileId(newFile)
-
-    // Update open files if this file is open
+    
     const isOpen = openFiles.some((f) => f.id === oldFileId)
+    
     if (isOpen) {
       setOpenFiles((prev) =>
         prev.map((f) => {
@@ -551,23 +535,16 @@ const MainPlaygroundPage: React.FC = () => {
             return { ...f, ...newFile, id: newFileId }
           }
           return f
-        }),
+        })
       )
-
+      
       if (activeFileId === oldFileId) {
         setActiveFileId(newFileId)
       }
-
-      // Update sync tracking
-      const content = lastSyncedContent.current.get(oldFileId)
-      if (content) {
-        lastSyncedContent.current.set(newFileId, content)
-        lastSyncedContent.current.delete(oldFileId)
-      }
     }
-
+    
     const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder
-
+    
     const updateFileInItems = (items: (TemplateFile | TemplateFolder)[]): (TemplateFile | TemplateFolder)[] => {
       return items.map((item) => {
         if ("folderName" in item) {
@@ -583,54 +560,31 @@ const MainPlaygroundPage: React.FC = () => {
         }
       })
     }
-
+    
     if (!parentPath) {
       updatedTemplateData.items = updateFileInItems(updatedTemplateData.items)
     } else {
       const pathParts = parentPath.split("/")
       let currentFolder = updatedTemplateData
+      
       for (const part of pathParts) {
-        const folder = currentFolder.items.find((item) => "folderName" in item && item.folderName === part) as
-          | TemplateFolder
-          | undefined
+        const folder = currentFolder.items.find(
+          (item) => "folderName" in item && item.folderName === part
+        ) as TemplateFolder | undefined
+        
         if (!folder) {
           toast.error(`Folder not found: ${part}`)
           return
         }
+        
         currentFolder = folder
       }
+      
       currentFolder.items = updateFileInItems(currentFolder.items)
     }
-
+    
     try {
-      // Handle WebContainer file rename
-      if (instance) {
-        const oldPath = findFilePath(file, templateData)
-        if (oldPath) {
-          const pathParts = oldPath.split("/")
-          pathParts.pop() // Remove the filename
-          const dirPath = pathParts.join("/")
-          const newPath = dirPath ? `${dirPath}/${newFilename}.${newExtension}` : `${newFilename}.${newExtension}`
-
-          try {
-            // Get the content of the old file
-            const fileContent = file.content
-
-            // Write the content to the new file
-            await writeFileSync(newPath, fileContent)
-
-            // Delete the old file
-            await instance.fs.rm(oldPath)
-          } catch (error) {
-            console.error("Failed to rename file in WebContainer:", error)
-          }
-        }
-      }
-
-      // Save the updated template data to the database
       await SaveUpdatedCode(id, updatedTemplateData)
-
-      // Update local state
       setTemplateData(updatedTemplateData)
       toast.success(`Renamed file to: ${newFilename}.${newExtension}`)
     } catch (error) {
@@ -638,12 +592,12 @@ const MainPlaygroundPage: React.FC = () => {
       toast.error("Failed to rename file")
     }
   }
-
+  
   const handleRenameFolder = async (folder: TemplateFolder, newFolderName: string, parentPath: string) => {
     if (!templateData || !id) return
-
+    
     const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder
-
+    
     if (!parentPath) {
       updatedTemplateData.items = updatedTemplateData.items.map((item) => {
         if ("folderName" in item && item.folderName === folder.folderName) {
@@ -654,16 +608,20 @@ const MainPlaygroundPage: React.FC = () => {
     } else {
       const pathParts = parentPath.split("/")
       let currentFolder = updatedTemplateData
+      
       for (const part of pathParts) {
-        const targetFolder = currentFolder.items.find((item) => "folderName" in item && item.folderName === part) as
-          | TemplateFolder
-          | undefined
+        const targetFolder = currentFolder.items.find(
+          (item) => "folderName" in item && item.folderName === part
+        ) as TemplateFolder | undefined
+        
         if (!targetFolder) {
           toast.error(`Folder not found: ${part}`)
           return
         }
+        
         currentFolder = targetFolder
       }
+      
       currentFolder.items = currentFolder.items.map((item) => {
         if ("folderName" in item && item.folderName === folder.folderName) {
           return { ...item, folderName: newFolderName }
@@ -671,30 +629,9 @@ const MainPlaygroundPage: React.FC = () => {
         return item
       })
     }
-
+    
     try {
-      // Handle WebContainer folder rename - this is more complex as we need to move all files
-      if (instance) {
-        const oldFolderPath = parentPath ? `${parentPath}/${folder.folderName}` : folder.folderName
-        const newFolderPath = parentPath ? `${parentPath}/${newFolderName}` : newFolderName
-
-        try {
-          // Create the new folder
-          await instance.fs.mkdir(newFolderPath, { recursive: true })
-
-          // We would need to recursively copy all files from old folder to new folder
-          // This is complex and would require a recursive function to traverse the folder structure
-          // For simplicity, we'll just update the database and let the WebContainer reinitialize
-          // on the next page load with the correct structure
-        } catch (error) {
-          console.error("Failed to rename folder in WebContainer:", error)
-        }
-      }
-
-      // Save the updated template data to the database
       await SaveUpdatedCode(id, updatedTemplateData)
-
-      // Update local state
       setTemplateData(updatedTemplateData)
       toast.success(`Renamed folder to: ${newFolderName}`)
     } catch (error) {
@@ -702,69 +639,74 @@ const MainPlaygroundPage: React.FC = () => {
       toast.error("Failed to rename folder")
     }
   }
-
+  
   // Editor functions
   const handleEditorDidMount = (editor: any, monaco: Monaco) => {
     editorRef.current = editor
     monacoRef.current = monaco
+    
     editor.updateOptions(defaultEditorOptions)
     configureMonaco(monaco)
-
+    
     setTimeout(() => {
       updateEditorLanguage()
     }, 100)
   }
-
+  
   const updateEditorLanguage = () => {
     if (!activeFile || !monacoRef.current || !editorRef.current) return
-
+    
     const model = editorRef.current.getModel()
     if (!model) return
-
+    
     const language = getEditorLanguage(activeFile.fileExtension || "")
-
+    
     try {
       monacoRef.current.editor.setModelLanguage(model, language)
     } catch (error) {
       console.warn("Failed to set editor language:", error)
     }
   }
-
+  
   const handleEditorChange = (value: string | undefined) => {
-    if (value !== undefined && activeFile) {
-      setEditorContent(value)
-
-      setOpenFiles((prev) =>
-        prev.map((file) => {
-          if (file.id === activeFile.id) {
-            const updatedFile = {
-              ...file,
-              content: value,
-              hasUnsavedChanges: value !== file.originalContent,
-            }
-
-            debouncedSync(updatedFile)
-            return updatedFile
+    if (value === undefined || !activeFile) return
+    
+    setEditorContent(value)
+    
+    setOpenFiles((prev) =>
+      prev.map((file) => {
+        if (file.id === activeFile.id) {
+          const hasChanges = value !== file.originalContent
+          
+          if (hasChanges) {
+            debouncedSync({ ...file, content: value })
           }
-          return file
-        }),
-      )
-
-      scheduleAutoSave()
-    }
+          
+          return {
+            ...file,
+            content: value,
+            hasUnsavedChanges: hasChanges,
+          }
+        }
+        return file
+      })
+    )
+    
+    scheduleAutoSave()
   }
-
+  
   // Save functions
   const handleSave = async (fileId?: string) => {
     const targetFileId = fileId || activeFileId
+    
     if (!targetFileId || !templateData) return
-
+    
     const fileToSave = openFiles.find((f) => f.id === targetFileId)
     if (!fileToSave) return
-
+    
     try {
-      const updatedTemplateData: TemplateFolder = JSON.parse(JSON.stringify(templateData))
-
+      const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder
+      
       const updateFileContent = (items: (TemplateFile | TemplateFolder)[]): (TemplateFile | TemplateFolder)[] => {
         return items.map((item) => {
           if ("folderName" in item) {
@@ -773,7 +715,7 @@ const MainPlaygroundPage: React.FC = () => {
               items: updateFileContent(item.items),
             }
           } else {
-            if (item.filename === fileToSave.filename && item.fileExtension === fileToSave.fileExtension) {
+            if (generateFileId(item) === generateFileId(fileToSave)) {
               return {
                 ...item,
                 content: fileToSave.content,
@@ -783,18 +725,19 @@ const MainPlaygroundPage: React.FC = () => {
           }
         })
       }
-
+      
       updatedTemplateData.items = updateFileContent(updatedTemplateData.items)
-      setTemplateData(updatedTemplateData)
-
-      const path = findFilePath(fileToSave, updatedTemplateData)
-      if (path && writeFileSync) {
-        await writeFileSync(path, fileToSave.content)
-        lastSyncedContent.current.set(fileToSave.id, fileToSave.content)
+      
+      if (writeFileSync) {
+        const path = findFilePath(fileToSave, updatedTemplateData)
+        if (path) {
+          await writeFileSync(path, fileToSave.content)
+          lastSyncedContent.current.set(fileToSave.id, fileToSave.content)
+        }
       }
-
+      
       await SaveUpdatedCode(id, updatedTemplateData)
-
+      
       setOpenFiles((prev) =>
         prev.map((file) =>
           file.id === targetFileId
@@ -803,24 +746,25 @@ const MainPlaygroundPage: React.FC = () => {
                 hasUnsavedChanges: false,
                 originalContent: file.content,
               }
-            : file,
-        ),
+            : file
+        )
       )
-
+      
       toast.success(`Saved ${fileToSave.filename}.${fileToSave.fileExtension}`)
     } catch (error) {
       console.error("Error saving file:", error)
-      toast.error("Failed to save file")
+      toast.error(`Failed to save ${fileToSave.filename}.${fileToSave.fileExtension}`)
     }
   }
-
+  
   const handleSaveAll = async () => {
     const unsavedFiles = openFiles.filter((f) => f.hasUnsavedChanges)
+    
     if (unsavedFiles.length === 0) {
-      toast.info("No unsaved changes to save")
+      toast.info("No unsaved changes")
       return
     }
-
+    
     try {
       await Promise.all(unsavedFiles.map((f) => handleSave(f.id)))
       toast.success(`Saved ${unsavedFiles.length} file(s)`)
@@ -828,49 +772,66 @@ const MainPlaygroundPage: React.FC = () => {
       toast.error("Failed to save some files")
     }
   }
-
+  
+  // Run project function
+  const handleRunProject = async () => {
+    if (!instance) {
+      toast.error("WebContainer not ready")
+      return
+    }
+    
+    setIsRunning(true)
+    
+    try {
+      // Save all files first
+      await handleSaveAll()
+      
+      // Try to start the development server
+      const installProcess = await instance.spawn("npm", ["install"])
+      const installExitCode = await installProcess.exit
+      
+      if (installExitCode !== 0) {
+        toast.error("Failed to install dependencies")
+        return
+      }
+      
+      const devProcess = await instance.spawn("npm", ["run", "dev"])
+      toast.success("🚀 Project is running!")
+    } catch (error) {
+      console.error("Error running project:", error)
+      toast.error("Failed to run project")
+    } finally {
+      setIsRunning(false)
+    }
+  }
+  
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.ctrlKey || event.metaKey) {
-        switch (event.key) {
-          case "s":
-            event.preventDefault()
-            if (event.shiftKey) {
-              handleSaveAll()
-            } else {
-              handleSave()
-            }
-            break
-          case "w":
-            event.preventDefault()
-            if (activeFileId) {
-              closeFile(activeFileId)
-            }
-            break
-          case "n":
-            event.preventDefault()
-            break
-          case "`":
-            event.preventDefault()
-            setIsTerminalVisible((prev) => !prev)
-            break
+      if ((event.ctrlKey || event.metaKey) && event.key === "s") {
+        event.preventDefault()
+        
+        if (event.shiftKey) {
+          handleSaveAll()
+        } else {
+          handleSave()
         }
       }
     }
-
+    
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [activeFileId])
-
+  }, [handleSave, handleSaveAll])
+  
   // Effects
   useEffect(() => {
     if (id) fetchPlaygroundTemplateData()
   }, [id])
-
+  
   useEffect(() => {
     if (activeFile) {
       setEditorContent(activeFile.content)
+      
       if (monacoRef.current && editorRef.current) {
         setTimeout(() => {
           updateEditorLanguage()
@@ -878,19 +839,20 @@ const MainPlaygroundPage: React.FC = () => {
       }
     }
   }, [activeFile])
-
+  
   // Cleanup
   useEffect(() => {
     return () => {
       if (autoSaveTimeoutRef.current) {
         clearTimeout(autoSaveTimeoutRef.current)
       }
+      
       if (syncTimeoutRef.current) {
         clearTimeout(syncTimeoutRef.current)
       }
     }
   }, [])
-
+  
   // Render loading state
   if (error) {
     return (
@@ -910,7 +872,7 @@ const MainPlaygroundPage: React.FC = () => {
       </div>
     )
   }
-
+  
   if (loadingStep < 3) {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] p-4">
@@ -931,7 +893,7 @@ const MainPlaygroundPage: React.FC = () => {
       </div>
     )
   }
-
+  
   if (!templateData) {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] p-4">
@@ -944,7 +906,7 @@ const MainPlaygroundPage: React.FC = () => {
       </div>
     )
   }
-
+  
   return (
     <TooltipProvider>
       <>
@@ -960,27 +922,29 @@ const MainPlaygroundPage: React.FC = () => {
           onRenameFile={handleRenameFile}
           onRenameFolder={handleRenameFolder}
         />
+        
         <SidebarInset>
           <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
             <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="mr-2 h-4" />
-
+            
             <div className="flex flex-1 items-center gap-2">
               <div className="flex flex-col flex-1">
-                <h1 className="text-sm font-medium">{playgroundData?.name || "Code Playground"}</h1>
+                <h1 className="text-sm font-medium">
+                  {playgroundData?.name || "Code Playground"}
+                </h1>
                 <p className="text-xs text-muted-foreground">
                   {openFiles.length} file(s) open
                   {hasUnsavedChanges && " • Unsaved changes"}
                 </p>
               </div>
-
+              
               <div className="flex items-center gap-1">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
                       size="sm"
                       variant="outline"
-                      // @ts-ignore
                       onClick={handleSave}
                       disabled={!activeFile || !activeFile.hasUnsavedChanges}
                     >
@@ -989,17 +953,16 @@ const MainPlaygroundPage: React.FC = () => {
                   </TooltipTrigger>
                   <TooltipContent>Save (Ctrl+S)</TooltipContent>
                 </Tooltip>
-
+                
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button size="sm" variant="outline" onClick={handleSaveAll} disabled={!hasUnsavedChanges}>
-                      <Save className="h-4 w-4" />
-                      All
+                      <Save className="h-4 w-4" /> All
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>Save All (Ctrl+Shift+S)</TooltipContent>
                 </Tooltip>
-
+                
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button size="sm" variant="outline">
@@ -1020,7 +983,7 @@ const MainPlaygroundPage: React.FC = () => {
               </div>
             </div>
           </header>
-
+          
           <div className="h-[calc(100vh-4rem)]">
             {openFiles.length > 0 ? (
               <div className="h-full flex flex-col">
@@ -1056,7 +1019,7 @@ const MainPlaygroundPage: React.FC = () => {
                           </TabsTrigger>
                         ))}
                       </TabsList>
-
+                      
                       {openFiles.length > 1 && (
                         <Button size="sm" variant="ghost" onClick={closeAllFiles} className="h-6 px-2 text-xs">
                           Close All
@@ -1065,7 +1028,7 @@ const MainPlaygroundPage: React.FC = () => {
                     </div>
                   </Tabs>
                 </div>
-
+                
                 {/* Editor and Preview */}
                 <div className="flex-1">
                   <ResizablePanelGroup direction="horizontal" className="h-full">
@@ -1078,34 +1041,32 @@ const MainPlaygroundPage: React.FC = () => {
                             onChange={handleEditorChange}
                             onMount={handleEditorDidMount}
                             language={activeFile ? getEditorLanguage(activeFile.fileExtension || "") : "plaintext"}
-                            // @ts-ignore
                             options={defaultEditorOptions}
                           />
                         </div>
-
+                        
                         {isTerminalVisible && (
                           <>
                             <ResizableHandle />
                             <div className="h-64 border-t">
-                              <TerminalComponent webcontainerUrl={serverUrl!} />
+                              <TerminalAsync webcontainerUrl={serverUrl!} />
                             </div>
                           </>
                         )}
                       </div>
                     </ResizablePanel>
-
+                    
                     {isPreviewVisible && (
                       <>
                         <ResizableHandle />
                         <ResizablePanel defaultSize={50}>
-                          <WebContainerPreview
-                          // @ts-ignore
-                            templateData={stableTemplateData}
-                            error={containerError!}
-                            instance={instance!}
-                            isLoading={isLoading}
-                            serverUrl={serverUrl!}
+                          <WebContainerPreview 
+                            templateData={templateData}
+                            instance={instance}
                             writeFileSync={writeFileSync}
+                            isLoading={containerLoading}
+                            error={containerError}
+                            serverUrl={serverUrl!}
                           />
                         </ResizablePanel>
                       </>
@@ -1124,7 +1085,7 @@ const MainPlaygroundPage: React.FC = () => {
             )}
           </div>
         </SidebarInset>
-
+        
         {/* Confirmation Dialog */}
         <Dialog
           open={confirmationDialog.isOpen}
