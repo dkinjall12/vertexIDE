@@ -113,7 +113,6 @@ const MainPlaygroundPage: React.FC = () => {
     instance,
     writeFileSync,
   } = useWebContainer({
-    // @ts-ignore
     templateData: stableTemplateData,
   })
 
@@ -380,6 +379,221 @@ const MainPlaygroundPage: React.FC = () => {
     toast.success(`Created folder: ${newFolder.folderName}`)
   }
 
+  const handleDeleteFile = (file: TemplateFile, parentPath: string) => {
+    if (!templateData) return
+
+    // Check if file is currently open and close it
+    const fileId = generateFileId(file)
+    const isOpen = openFiles.some((f) => f.id === fileId)
+    if (isOpen) {
+      closeFileForce(fileId)
+    }
+
+    const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder
+
+    const deleteFromItems = (items: (TemplateFile | TemplateFolder)[]): (TemplateFile | TemplateFolder)[] => {
+      return items
+        .filter((item) => {
+          if ("folderName" in item) {
+            return true // Keep folders, but process their contents
+          } else {
+            // Remove the file if it matches
+            return !(item.filename === file.filename && item.fileExtension === file.fileExtension)
+          }
+        })
+        .map((item) => {
+          if ("folderName" in item) {
+            return {
+              ...item,
+              items: deleteFromItems(item.items),
+            }
+          }
+          return item
+        })
+    }
+
+    if (!parentPath) {
+      updatedTemplateData.items = deleteFromItems(updatedTemplateData.items)
+    } else {
+      const pathParts = parentPath.split("/")
+      let currentFolder = updatedTemplateData
+      for (const part of pathParts) {
+        const folder = currentFolder.items.find((item) => "folderName" in item && item.folderName === part) as
+          | TemplateFolder
+          | undefined
+        if (!folder) {
+          toast.error(`Folder not found: ${part}`)
+          return
+        }
+        currentFolder = folder
+      }
+      currentFolder.items = currentFolder.items.filter((item) => {
+        if ("folderName" in item) {
+          return true
+        } else {
+          return !(item.filename === file.filename && item.fileExtension === file.fileExtension)
+        }
+      })
+    }
+
+    setTemplateData(updatedTemplateData)
+    toast.success(`Deleted file: ${file.filename}.${file.fileExtension}`)
+  }
+
+  const handleDeleteFolder = (folder: TemplateFolder, parentPath: string) => {
+    if (!templateData) return
+
+    // Close any open files from this folder
+    const folderPath = parentPath ? `${parentPath}/${folder.folderName}` : folder.folderName
+    const filesToClose = openFiles.filter((file) => {
+      const filePath = findFilePath(file, templateData)
+      return filePath?.startsWith(folderPath)
+    })
+
+    filesToClose.forEach((file) => closeFileForce(file.id))
+
+    const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder
+
+    if (!parentPath) {
+      updatedTemplateData.items = updatedTemplateData.items.filter((item) => {
+        if ("folderName" in item) {
+          return item.folderName !== folder.folderName
+        }
+        return true
+      })
+    } else {
+      const pathParts = parentPath.split("/")
+      let currentFolder = updatedTemplateData
+      for (const part of pathParts) {
+        const targetFolder = currentFolder.items.find((item) => "folderName" in item && item.folderName === part) as
+          | TemplateFolder
+          | undefined
+        if (!targetFolder) {
+          toast.error(`Folder not found: ${part}`)
+          return
+        }
+        currentFolder = targetFolder
+      }
+      currentFolder.items = currentFolder.items.filter((item) => {
+        if ("folderName" in item) {
+          return item.folderName !== folder.folderName
+        }
+        return true
+      })
+    }
+
+    setTemplateData(updatedTemplateData)
+    toast.success(`Deleted folder: ${folder.folderName}`)
+  }
+
+  const handleRenameFile = (file: TemplateFile, newFilename: string, newExtension: string, parentPath: string) => {
+    if (!templateData) return
+
+    const oldFileId = generateFileId(file)
+    const newFile = { ...file, filename: newFilename, fileExtension: newExtension }
+    const newFileId = generateFileId(newFile)
+
+    // Update open files if this file is open
+    const isOpen = openFiles.some((f) => f.id === oldFileId)
+    if (isOpen) {
+      setOpenFiles((prev) =>
+        prev.map((f) => {
+          if (f.id === oldFileId) {
+            return { ...f, ...newFile, id: newFileId }
+          }
+          return f
+        }),
+      )
+
+      if (activeFileId === oldFileId) {
+        setActiveFileId(newFileId)
+      }
+
+      // Update sync tracking
+      const content = lastSyncedContent.current.get(oldFileId)
+      if (content) {
+        lastSyncedContent.current.set(newFileId, content)
+        lastSyncedContent.current.delete(oldFileId)
+      }
+    }
+
+    const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder
+
+    const updateFileInItems = (items: (TemplateFile | TemplateFolder)[]): (TemplateFile | TemplateFolder)[] => {
+      return items.map((item) => {
+        if ("folderName" in item) {
+          return {
+            ...item,
+            items: updateFileInItems(item.items),
+          }
+        } else {
+          if (item.filename === file.filename && item.fileExtension === file.fileExtension) {
+            return { ...item, filename: newFilename, fileExtension: newExtension }
+          }
+          return item
+        }
+      })
+    }
+
+    if (!parentPath) {
+      updatedTemplateData.items = updateFileInItems(updatedTemplateData.items)
+    } else {
+      const pathParts = parentPath.split("/")
+      let currentFolder = updatedTemplateData
+      for (const part of pathParts) {
+        const folder = currentFolder.items.find((item) => "folderName" in item && item.folderName === part) as
+          | TemplateFolder
+          | undefined
+        if (!folder) {
+          toast.error(`Folder not found: ${part}`)
+          return
+        }
+        currentFolder = folder
+      }
+      currentFolder.items = updateFileInItems(currentFolder.items)
+    }
+
+    setTemplateData(updatedTemplateData)
+    toast.success(`Renamed file to: ${newFilename}.${newExtension}`)
+  }
+
+  const handleRenameFolder = (folder: TemplateFolder, newFolderName: string, parentPath: string) => {
+    if (!templateData) return
+
+    const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder
+
+    if (!parentPath) {
+      updatedTemplateData.items = updatedTemplateData.items.map((item) => {
+        if ("folderName" in item && item.folderName === folder.folderName) {
+          return { ...item, folderName: newFolderName }
+        }
+        return item
+      })
+    } else {
+      const pathParts = parentPath.split("/")
+      let currentFolder = updatedTemplateData
+      for (const part of pathParts) {
+        const targetFolder = currentFolder.items.find((item) => "folderName" in item && item.folderName === part) as
+          | TemplateFolder
+          | undefined
+        if (!targetFolder) {
+          toast.error(`Folder not found: ${part}`)
+          return
+        }
+        currentFolder = targetFolder
+      }
+      currentFolder.items = currentFolder.items.map((item) => {
+        if ("folderName" in item && item.folderName === folder.folderName) {
+          return { ...item, folderName: newFolderName }
+        }
+        return item
+      })
+    }
+
+    setTemplateData(updatedTemplateData)
+    toast.success(`Renamed folder to: ${newFolderName}`)
+  }
+
   // Editor functions
   const handleEditorDidMount = (editor: any, monaco: Monaco) => {
     editorRef.current = editor
@@ -632,6 +846,10 @@ const MainPlaygroundPage: React.FC = () => {
           title="Template Explorer"
           onAddFile={handleAddFile}
           onAddFolder={handleAddFolder}
+          onDeleteFile={handleDeleteFile}
+          onDeleteFolder={handleDeleteFolder}
+          onRenameFile={handleRenameFile}
+          onRenameFolder={handleRenameFolder}
         />
         <SidebarInset>
           <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
