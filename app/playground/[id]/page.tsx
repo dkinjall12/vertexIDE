@@ -1,29 +1,34 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { useState, useEffect, useRef, useCallback } from "react"
-import { Separator } from "@/components/ui/separator"
-import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
-import { TemplateFileTree } from "@/features/playground/components/playground-explorer"
-import type { TemplateFile } from "@/features/playground/libs/path-to-json"
-import { useParams } from "next/navigation"
-import { getPlaygroundById, SaveUpdatedCode } from "@/features/playground/actions"
-import { toast } from "sonner"
-import { 
-  FileText, 
-  FolderOpen, 
-  AlertCircle, 
-  Save, 
-  X, 
-  Settings, 
-  Play, 
+import type React from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Separator } from "@/components/ui/separator";
+import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
+import { TemplateFileTree } from "@/features/playground/components/playground-explorer";
+import type { TemplateFile } from "@/features/playground/libs/path-to-json";
+import { useParams } from "next/navigation";
+import {
+  getPlaygroundById,
+  SaveUpdatedCode,
+} from "@/features/playground/actions";
+import { toast } from "sonner";
+import {
+  FileText,
+  FolderOpen,
+  AlertCircle,
+  Save,
+  X,
+  Settings,
+  Play,
   RefreshCw,
   Loader2,
-  CheckCircle
-} from "lucide-react"
-import Editor, { type Monaco } from "@monaco-editor/react"
-import { Button } from "@/components/ui/button"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+  CheckCircle,
+  Sparkles,
+  Lightbulb,
+} from "lucide-react";
+import Editor, { type Monaco } from "@monaco-editor/react";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -31,90 +36,127 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
-import WebContainerPreview from "@/features/webcontainers/components/webcontainer-preveiw"
-import TerminalComponent from "@/features/webcontainers/components/terminal"
-import LoadingStep from "@/components/ui/loader"
-import { configureMonaco, defaultEditorOptions, getEditorLanguage } from "@/features/playground/libs/editor-config"
-import dynamic from "next/dynamic"
-import { findFilePath } from "@/features/playground/libs"
-import { useWebContainer } from "@/features/webcontainers/hooks/useWebContainer"
-import { TemplateFolder } from "@/features/playground/libs/path-to-json"
+} from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
+import WebContainerPreview from "@/features/webcontainers/components/webcontainer-preveiw";
+import TerminalComponent from "@/features/webcontainers/components/terminal";
+import LoadingStep from "@/components/ui/loader";
+import {
+  configureMonaco,
+  defaultEditorOptions,
+  getEditorLanguage,
+} from "@/features/playground/libs/editor-config";
+import dynamic from "next/dynamic";
+import { findFilePath } from "@/features/playground/libs";
+import { useWebContainer } from "@/features/webcontainers/hooks/useWebContainer";
+import { TemplateFolder } from "@/features/playground/libs/path-to-json";
+import { longPoll } from "@/features/playground/libs";
+import { AISuggestionOverlay } from "@/features/playground/components/ai-suggestion-overlay";
 
 // Dynamic imports for components that don't need SSR
-const TerminalAsync = dynamic(() => import("@/features/webcontainers/components/terminal"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex items-center justify-center h-full text-muted-foreground">Loading terminal...</div>
-  ),
-})
+const TerminalAsync = dynamic(
+  () => import("@/features/webcontainers/components/terminal"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-full text-muted-foreground">
+        Loading terminal...
+      </div>
+    ),
+  }
+);
 
 interface PlaygroundData {
-  id: string
-  name?: string
-  [key: string]: any
+  id: string;
+  name?: string;
+  [key: string]: any;
 }
 
 interface OpenFile extends TemplateFile {
-  id: string
-  hasUnsavedChanges: boolean
-  content: string
-  originalContent: string
+  id: string;
+  hasUnsavedChanges: boolean;
+  content: string;
+  originalContent: string;
 }
 
 interface ConfirmationDialog {
-  isOpen: boolean
-  title: string
-  description: string
-  onConfirm: () => void
-  onCancel: () => void
+  isOpen: boolean;
+  title: string;
+  description: string;
+  onConfirm: () => void;
+  onCancel: () => void;
 }
 
 const MainPlaygroundPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
 
   // Add a state to track WebContainer initialization
-  const [isWebContainerInitialized, setIsWebContainerInitialized] = useState(false);
+  const [isWebContainerInitialized, setIsWebContainerInitialized] =
+    useState(false);
 
   // Core state
-  const [playgroundData, setPlaygroundData] = useState<PlaygroundData | null>(null)
-  const [templateData, setTemplateData] = useState<TemplateFolder | null>(null)
-  const [loadingStep, setLoadingStep] = useState<number>(1)
-  const [error, setError] = useState<string | null>(null)
-  
+  const [playgroundData, setPlaygroundData] = useState<PlaygroundData | null>(
+    null
+  );
+  const [templateData, setTemplateData] = useState<TemplateFolder | null>(null);
+  const [loadingStep, setLoadingStep] = useState<number>(1);
+  const [error, setError] = useState<string | null>(null);
+
   // Multi-file editor state
-  const [openFiles, setOpenFiles] = useState<OpenFile[]>([])
-  const [activeFileId, setActiveFileId] = useState<string | null>(null)
-  const [editorContent, setEditorContent] = useState<string>("")
-  
+  const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
+  const [activeFileId, setActiveFileId] = useState<string | null>(null);
+  const [editorContent, setEditorContent] = useState<string>("");
+
   // UI state
-  const [confirmationDialog, setConfirmationDialog] = useState<ConfirmationDialog>({
-    isOpen: false,
-    title: "",
-    description: "",
-    onConfirm: () => {},
-    onCancel: () => {},
-  })
-  const [isTerminalVisible, setIsTerminalVisible] = useState(false)
-  const [isPreviewVisible, setIsPreviewVisible] = useState(true)
-  const [isRunning, setIsRunning] = useState(false)
-  
+  const [confirmationDialog, setConfirmationDialog] =
+    useState<ConfirmationDialog>({
+      isOpen: false,
+      title: "",
+      description: "",
+      onConfirm: () => {},
+      onCancel: () => {},
+    });
+  const [isTerminalVisible, setIsTerminalVisible] = useState(false);
+  const [isPreviewVisible, setIsPreviewVisible] = useState(true);
+  const [isRunning, setIsRunning] = useState(false);
+
+  // AI Suggestion state
+  const [suggestion, setSuggestion] = useState<string | null>(null);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [suggestionPosition, setSuggestionPosition] = useState<{
+    line: number;
+    column: number;
+  } | null>(null);
+  const [suggestionDecoration, setSuggestionDecoration] = useState<string[]>(
+    []
+  );
+  const [suggestionType, setSuggestionType] = useState<string>("completion");
+
   // Refs
-  const editorRef = useRef<any>(null)
-  const monacoRef = useRef<Monaco | null>(null)
-  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const lastSyncedContent = useRef<Map<string, string>>(new Map())
-  
+  const editorRef = useRef<any>(null);
+  const monacoRef = useRef<Monaco | null>(null);
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSyncedContent = useRef<Map<string, string>>(new Map());
+  const suggestionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   // WebContainer hook
   const {
     serverUrl,
@@ -126,6 +168,96 @@ const MainPlaygroundPage: React.FC = () => {
   } = useWebContainer({
     templateData,
   });
+
+  const fetchCodeSuggestion = async (suggestionType: string = "completion") => {
+    if (!activeFile || !editorRef.current) return;
+
+    const model = editorRef.current.getModel();
+    const cursorPosition = editorRef.current.getPosition();
+
+    const fileContent = model.getValue(); // Get full file content
+    const cursorLine = cursorPosition.lineNumber - 1; // Convert to 0-based index
+    const cursorColumn = cursorPosition.column - 1; // Same here
+
+    try {
+      const response = await fetch("/api/code-suggestion", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fileContent,
+          cursorLine,
+          cursorColumn,
+          suggestionType,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.suggestion && editorRef.current) {
+        const suggestionText = data.suggestion.trim();
+        setSuggestion(suggestionText);
+        setSuggestionPosition({
+          line: cursorPosition.lineNumber,
+          column: cursorPosition.column,
+        });
+
+        // Highlight the suggestion as ghost text
+        applyGhostText(
+          editorRef.current,
+          suggestionText,
+          cursorPosition.lineNumber,
+          cursorPosition.column
+        );
+      }
+    } catch (error) {
+      console.error("Error fetching code suggestion:", error);
+    }
+  };
+  function debouncedSuggestion() {
+    if (suggestionTimeoutRef.current) {
+      clearTimeout(suggestionTimeoutRef.current);
+    }
+    suggestionTimeoutRef.current = setTimeout(() => {
+      fetchCodeSuggestion("completion");
+    }, 500);
+  }
+  const applyGhostText = (
+    editor: any,
+    suggestion: string,
+    lineNumber: number,
+    column: number
+  ) => {
+    if (!editor) return;
+
+    const model = editor.getModel();
+    const endOfLine = model.getLineMaxColumn(lineNumber);
+
+    const decoration = [
+      {
+        range: monacoRef.current
+          ? new monacoRef.current.Range(
+              lineNumber,
+              column,
+              lineNumber,
+              endOfLine
+            )
+          : undefined,
+        options: {
+          isWholeLine: false,
+          inlineClassName: "ghost-text",
+          hoverMessage: { value: `💡 AI Suggestion: ${suggestion}` },
+        },
+      },
+    ];
+
+    const newDecorations = editor.deltaDecorations(
+      suggestionDecoration,
+      decoration
+    );
+    setSuggestionDecoration(newDecorations);
+  };
 
   // Initialize WebContainer only once
   useEffect(() => {
@@ -145,395 +277,427 @@ const MainPlaygroundPage: React.FC = () => {
 
   // Helper function to generate unique file ID
   const generateFileId = useCallback((file: TemplateFile): string => {
-    return `${file.filename}.${file.fileExtension}`
-  }, [])
-  
+    return `${file.filename}.${file.fileExtension}`;
+  }, []);
+
   // Get active file
-  const activeFile = openFiles.find((file) => file.id === activeFileId)
-  
+  const activeFile = openFiles.find((file) => file.id === activeFileId);
+
   // Check if there are any unsaved changes
-  const hasUnsavedChanges = openFiles.some((file) => file.hasUnsavedChanges)
-  
+  const hasUnsavedChanges = openFiles.some((file) => file.hasUnsavedChanges);
+
   // Debounced sync to WebContainer
   const debouncedSync = useCallback(
     (file: OpenFile) => {
-      if (!writeFileSync || !templateData) return
-      
+      if (!writeFileSync || !templateData) return;
+
       if (syncTimeoutRef.current) {
-        clearTimeout(syncTimeoutRef.current)
+        clearTimeout(syncTimeoutRef.current);
       }
-      
+
       syncTimeoutRef.current = setTimeout(async () => {
         try {
-          const path = findFilePath(file, templateData)
+          const path = findFilePath(file, templateData);
           if (!path) {
-            console.error(`Could not find path for file: ${file.filename}.${file.fileExtension}`)
-            return
+            console.error(
+              `Could not find path for file: ${file.filename}.${file.fileExtension}`
+            );
+            return;
           }
-          
-          await writeFileSync(path, file.content)
-          lastSyncedContent.current.set(file.id, file.content)
-          console.log(`✅ Synced ${file.filename}.${file.fileExtension} to WebContainer`)
+
+          await writeFileSync(path, file.content);
+          lastSyncedContent.current.set(file.id, file.content);
+          console.log(
+            `✅ Synced ${file.filename}.${file.fileExtension} to WebContainer`
+          );
         } catch (error) {
-          console.error("Failed to sync file to WebContainer:", error)
+          console.error("Failed to sync file to WebContainer:", error);
         }
-      }, 500)
+      }, 500);
     },
     [templateData, writeFileSync]
-  )
-  
+  );
+
   // Auto-save functionality
   const scheduleAutoSave = useCallback(() => {
     if (autoSaveTimeoutRef.current) {
-      clearTimeout(autoSaveTimeoutRef.current)
+      clearTimeout(autoSaveTimeoutRef.current);
     }
-    
-    if (!activeFile || !activeFile.hasUnsavedChanges) return
-    
+
+    if (!activeFile || !activeFile.hasUnsavedChanges) return;
+
     autoSaveTimeoutRef.current = setTimeout(() => {
-      handleSave(activeFile.id)
-    }, 3000)
-  }, [activeFile])
-  
+      handleSave(activeFile.id);
+    }, 3000);
+  }, [activeFile]);
+
   // Fetch playground data
   const fetchPlaygroundTemplateData = async () => {
-    if (!id) return
-    
+    if (!id) return;
+
     try {
-      setLoadingStep(1)
-      setError(null)
-      
-      const data = await getPlaygroundById(id)
+      setLoadingStep(1);
+      setError(null);
+
+      const data = await getPlaygroundById(id);
       // @ts-ignore
-      setPlaygroundData(data)
-      
-      const rawContent = data?.templateFiles?.[0]?.content
+      setPlaygroundData(data);
+
+      const rawContent = data?.templateFiles?.[0]?.content;
       if (typeof rawContent === "string") {
-        const parsedContent = JSON.parse(rawContent)
-        setTemplateData(parsedContent)
-        setLoadingStep(3)
-        toast.success("Loaded template from saved content")
-        return
+        const parsedContent = JSON.parse(rawContent);
+        setTemplateData(parsedContent);
+        setLoadingStep(3);
+        toast.success("Loaded template from saved content");
+        return;
       }
-      
-      setLoadingStep(2)
-      toast.success("Playground metadata loaded")
-      await loadTemplate()
+
+      setLoadingStep(2);
+      toast.success("Playground metadata loaded");
+      await loadTemplate();
     } catch (error) {
-      console.error("Error loading playground:", error)
-      setError("Failed to load playground data")
-      toast.error("Failed to load playground data")
+      console.error("Error loading playground:", error);
+      setError("Failed to load playground data");
+      toast.error("Failed to load playground data");
     }
-  }
-  
+  };
+
   const loadTemplate = async () => {
-    if (!id) return
-    
+    if (!id) return;
+
     try {
-      setLoadingStep(2)
-      const res = await fetch(`/api/template/${id}`)
-      
-      if (!res.ok) throw new Error(`Failed to load template: ${res.status}`)
-      
-      const data = await res.json()
-      
+      setLoadingStep(2);
+      const res = await fetch(`/api/template/${id}`);
+
+      if (!res.ok) throw new Error(`Failed to load template: ${res.status}`);
+
+      const data = await res.json();
+
       if (data.templateJson && Array.isArray(data.templateJson)) {
         setTemplateData({
           folderName: "Root",
           items: data.templateJson,
-        })
+        });
       } else {
         setTemplateData(
           data.templateJson || {
             folderName: "Root",
             items: [],
           }
-        )
+        );
       }
-      
-      setLoadingStep(3)
-      toast.success("Template loaded successfully")
+
+      setLoadingStep(3);
+      toast.success("Template loaded successfully");
     } catch (error) {
-      console.error("Error loading template:", error)
-      setError("Failed to load template data")
-      toast.error("Failed to load template data")
+      console.error("Error loading template:", error);
+      setError("Failed to load template data");
+      toast.error("Failed to load template data");
     }
-  }
-  
+  };
+
   // File management functions
   const openFile = (file: TemplateFile) => {
-    const fileId = generateFileId(file)
-    const existingFile = openFiles.find((f) => f.id === fileId)
-    
+    const fileId = generateFileId(file);
+    const existingFile = openFiles.find((f) => f.id === fileId);
+
     if (existingFile) {
-      setActiveFileId(fileId)
-      setEditorContent(existingFile.content)
-      return
+      setActiveFileId(fileId);
+      setEditorContent(existingFile.content);
+      return;
     }
-    
+
     const newOpenFile: OpenFile = {
       ...file,
       id: fileId,
       hasUnsavedChanges: false,
       content: file.content || "",
       originalContent: file.content || "",
-    }
-    
-    setOpenFiles((prev) => [...prev, newOpenFile])
-    setActiveFileId(fileId)
-    setEditorContent(file.content || "")
-  }
-  
+    };
+
+    setOpenFiles((prev) => [...prev, newOpenFile]);
+    setActiveFileId(fileId);
+    setEditorContent(file.content || "");
+  };
+
   const closeFile = (fileId: string) => {
-    const file = openFiles.find((f) => f.id === fileId)
-    
+    const file = openFiles.find((f) => f.id === fileId);
+
     if (file && file.hasUnsavedChanges) {
       setConfirmationDialog({
         isOpen: true,
         title: "Unsaved Changes",
         description: `You have unsaved changes in ${file.filename}.${file.fileExtension}. Do you want to save before closing?`,
         onConfirm: async () => {
-          await handleSave(fileId)
-          closeFileForce(fileId)
-          setConfirmationDialog((prev) => ({ ...prev, isOpen: false }))
+          await handleSave(fileId);
+          closeFileForce(fileId);
+          setConfirmationDialog((prev) => ({ ...prev, isOpen: false }));
         },
         onCancel: () => {
-          closeFileForce(fileId)
-          setConfirmationDialog((prev) => ({ ...prev, isOpen: false }))
+          closeFileForce(fileId);
+          setConfirmationDialog((prev) => ({ ...prev, isOpen: false }));
         },
-      })
+      });
     } else {
-      closeFileForce(fileId)
+      closeFileForce(fileId);
     }
-  }
-  
+  };
+
   const closeFileForce = (fileId: string) => {
     setOpenFiles((prev) => {
-      const newFiles = prev.filter((f) => f.id !== fileId)
-      const newActiveFile = newFiles.length > 0 ? newFiles[newFiles.length - 1] : null
-      
+      const newFiles = prev.filter((f) => f.id !== fileId);
+      const newActiveFile =
+        newFiles.length > 0 ? newFiles[newFiles.length - 1] : null;
+
       if (newActiveFile) {
-        setActiveFileId(newActiveFile.id)
-        setEditorContent(newActiveFile.content)
+        setActiveFileId(newActiveFile.id);
+        setEditorContent(newActiveFile.content);
       } else {
-        setActiveFileId(null)
-        setEditorContent("")
+        setActiveFileId(null);
+        setEditorContent("");
       }
-      
-      return newFiles
-    })
-    
-    lastSyncedContent.current.delete(fileId)
-  }
-  
+
+      return newFiles;
+    });
+
+    lastSyncedContent.current.delete(fileId);
+  };
+
   const closeAllFiles = () => {
-    const unsavedFiles = openFiles.filter((f) => f.hasUnsavedChanges)
-    
+    const unsavedFiles = openFiles.filter((f) => f.hasUnsavedChanges);
+
     if (unsavedFiles.length > 0) {
       setConfirmationDialog({
         isOpen: true,
         title: "Unsaved Changes",
         description: `You have unsaved changes in ${unsavedFiles.length} file(s). Do you want to save all before closing?`,
         onConfirm: async () => {
-          await Promise.all(unsavedFiles.map((f) => handleSave(f.id)))
-          setOpenFiles([])
-          setActiveFileId(null)
-          setEditorContent("")
-          setConfirmationDialog((prev) => ({ ...prev, isOpen: false }))
+          await Promise.all(unsavedFiles.map((f) => handleSave(f.id)));
+          setOpenFiles([]);
+          setActiveFileId(null);
+          setEditorContent("");
+          setConfirmationDialog((prev) => ({ ...prev, isOpen: false }));
         },
         onCancel: () => {
-          setOpenFiles([])
-          setActiveFileId(null)
-          setEditorContent("")
-          setConfirmationDialog((prev) => ({ ...prev, isOpen: false }))
+          setOpenFiles([]);
+          setActiveFileId(null);
+          setEditorContent("");
+          setConfirmationDialog((prev) => ({ ...prev, isOpen: false }));
         },
-      })
+      });
     } else {
-      setOpenFiles([])
-      setActiveFileId(null)
-      setEditorContent("")
+      setOpenFiles([]);
+      setActiveFileId(null);
+      setEditorContent("");
     }
-  }
-  
+  };
+
   const handleFileSelect = (file: TemplateFile) => {
-    openFile(file)
-  }
-  
+    openFile(file);
+  };
+
   const handleAddFile = (newFile: TemplateFile, parentPath: string) => {
-    if (!templateData) return
-    
+    if (!templateData) return;
+
     try {
-      const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder
-      
+      const updatedTemplateData = JSON.parse(
+        JSON.stringify(templateData)
+      ) as TemplateFolder;
+
       if (!parentPath) {
-        updatedTemplateData.items.push(newFile)
-        setTemplateData(updatedTemplateData)
-        toast.success(`Created file: ${newFile.filename}.${newFile.fileExtension}`)
-        openFile(newFile)
-        return
+        updatedTemplateData.items.push(newFile);
+        setTemplateData(updatedTemplateData);
+        toast.success(
+          `Created file: ${newFile.filename}.${newFile.fileExtension}`
+        );
+        openFile(newFile);
+        return;
       }
-      
-      const pathParts = parentPath.split("/")
-      let currentFolder = updatedTemplateData
-      
+
+      const pathParts = parentPath.split("/");
+      let currentFolder = updatedTemplateData;
+
       for (const part of pathParts) {
         const folder = currentFolder.items.find(
           (item) => "folderName" in item && item.folderName === part
-        ) as TemplateFolder | undefined
-        
+        ) as TemplateFolder | undefined;
+
         if (!folder) {
-          toast.error(`Folder not found: ${part}`)
-          return
+          toast.error(`Folder not found: ${part}`);
+          return;
         }
-        
-        currentFolder = folder
+
+        currentFolder = folder;
       }
-      
-      currentFolder.items.push(newFile)
-      setTemplateData(updatedTemplateData)
-      toast.success(`Created file: ${newFile.filename}.${newFile.fileExtension}`)
-      openFile(newFile)
+
+      currentFolder.items.push(newFile);
+      setTemplateData(updatedTemplateData);
+      toast.success(
+        `Created file: ${newFile.filename}.${newFile.fileExtension}`
+      );
+      openFile(newFile);
     } catch (error) {
-      console.error("Error adding file:", error)
-      toast.error("Failed to create file")
+      console.error("Error adding file:", error);
+      toast.error("Failed to create file");
     }
-  }
-  
+  };
+
   const handleAddFolder = (newFolder: TemplateFolder, parentPath: string) => {
-    if (!templateData) return
-    
+    if (!templateData) return;
+
     try {
-      const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder
-      
+      const updatedTemplateData = JSON.parse(
+        JSON.stringify(templateData)
+      ) as TemplateFolder;
+
       if (!parentPath) {
-        updatedTemplateData.items.push(newFolder)
-        setTemplateData(updatedTemplateData)
-        toast.success(`Created folder: ${newFolder.folderName}`)
-        return
+        updatedTemplateData.items.push(newFolder);
+        setTemplateData(updatedTemplateData);
+        toast.success(`Created folder: ${newFolder.folderName}`);
+        return;
       }
-      
-      const pathParts = parentPath.split("/")
-      let currentFolder = updatedTemplateData
-      
+
+      const pathParts = parentPath.split("/");
+      let currentFolder = updatedTemplateData;
+
       for (const part of pathParts) {
         const folder = currentFolder.items.find(
           (item) => "folderName" in item && item.folderName === part
-        ) as TemplateFolder | undefined
-        
+        ) as TemplateFolder | undefined;
+
         if (!folder) {
-          toast.error(`Folder not found: ${part}`)
-          return
+          toast.error(`Folder not found: ${part}`);
+          return;
         }
-        
-        currentFolder = folder
+
+        currentFolder = folder;
       }
-      
-      currentFolder.items.push(newFolder)
-      setTemplateData(updatedTemplateData)
-      toast.success(`Created folder: ${newFolder.folderName}`)
+
+      currentFolder.items.push(newFolder);
+      setTemplateData(updatedTemplateData);
+      toast.success(`Created folder: ${newFolder.folderName}`);
     } catch (error) {
-      console.error("Error adding folder:", error)
-      toast.error("Failed to create folder")
+      console.error("Error adding folder:", error);
+      toast.error("Failed to create folder");
     }
-  }
-  
+  };
+
   const handleDeleteFile = async (file: TemplateFile, parentPath: string) => {
-    if (!templateData || !id) return
-    
+    if (!templateData || !id) return;
+
     try {
-      const fileId = generateFileId(file)
-      const isOpen = openFiles.some((f) => f.id === fileId)
-      
+      const fileId = generateFileId(file);
+      const isOpen = openFiles.some((f) => f.id === fileId);
+
       if (isOpen) {
-        closeFileForce(fileId)
+        closeFileForce(fileId);
       }
-      
-      const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder
-      
+
+      const updatedTemplateData = JSON.parse(
+        JSON.stringify(templateData)
+      ) as TemplateFolder;
+
       if (!parentPath) {
         updatedTemplateData.items = updatedTemplateData.items.filter(
-          (item) => !("filename" in item && item.filename === file.filename && item.fileExtension === file.fileExtension)
-        )
-        setTemplateData(updatedTemplateData)
-        await SaveUpdatedCode(id, updatedTemplateData)
-        toast.success(`Deleted file: ${file.filename}.${file.fileExtension}`)
-        return
+          (item) =>
+            !(
+              "filename" in item &&
+              item.filename === file.filename &&
+              item.fileExtension === file.fileExtension
+            )
+        );
+        setTemplateData(updatedTemplateData);
+        await SaveUpdatedCode(id, updatedTemplateData);
+        toast.success(`Deleted file: ${file.filename}.${file.fileExtension}`);
+        return;
       }
-      
-      const pathParts = parentPath.split("/")
-      let currentFolder = updatedTemplateData
-      
+
+      const pathParts = parentPath.split("/");
+      let currentFolder = updatedTemplateData;
+
       for (const part of pathParts) {
         const folder = currentFolder.items.find(
           (item) => "folderName" in item && item.folderName === part
-        ) as TemplateFolder | undefined
-        
+        ) as TemplateFolder | undefined;
+
         if (!folder) {
-          toast.error(`Folder not found: ${part}`)
-          return
+          toast.error(`Folder not found: ${part}`);
+          return;
         }
-        
-        currentFolder = folder
+
+        currentFolder = folder;
       }
-      
+
       currentFolder.items = currentFolder.items.filter(
-        (item) => !("filename" in item && item.filename === file.filename && item.fileExtension === file.fileExtension)
-      )
-      
-      setTemplateData(updatedTemplateData)
-      await SaveUpdatedCode(id, updatedTemplateData)
-      toast.success(`Deleted file: ${file.filename}.${file.fileExtension}`)
+        (item) =>
+          !(
+            "filename" in item &&
+            item.filename === file.filename &&
+            item.fileExtension === file.fileExtension
+          )
+      );
+
+      setTemplateData(updatedTemplateData);
+      await SaveUpdatedCode(id, updatedTemplateData);
+      toast.success(`Deleted file: ${file.filename}.${file.fileExtension}`);
     } catch (error) {
-      console.error("Error deleting file:", error)
-      toast.error("Failed to delete file")
+      console.error("Error deleting file:", error);
+      toast.error("Failed to delete file");
     }
-  }
-  
-  const handleDeleteFolder = async (folder: TemplateFolder, parentPath: string) => {
-    if (!templateData || !id) return
-    
+  };
+
+  const handleDeleteFolder = async (
+    folder: TemplateFolder,
+    parentPath: string
+  ) => {
+    if (!templateData || !id) return;
+
     try {
-      const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder
-      
+      const updatedTemplateData = JSON.parse(
+        JSON.stringify(templateData)
+      ) as TemplateFolder;
+
       if (!parentPath) {
         updatedTemplateData.items = updatedTemplateData.items.filter(
-          (item) => !("folderName" in item && item.folderName === folder.folderName)
-        )
-        setTemplateData(updatedTemplateData)
-        await SaveUpdatedCode(id, updatedTemplateData)
-        toast.success(`Deleted folder: ${folder.folderName}`)
-        return
+          (item) =>
+            !("folderName" in item && item.folderName === folder.folderName)
+        );
+        setTemplateData(updatedTemplateData);
+        await SaveUpdatedCode(id, updatedTemplateData);
+        toast.success(`Deleted folder: ${folder.folderName}`);
+        return;
       }
-      
-      const pathParts = parentPath.split("/")
-      let currentFolder = updatedTemplateData
-      
+
+      const pathParts = parentPath.split("/");
+      let currentFolder = updatedTemplateData;
+
       for (const part of pathParts) {
         const targetFolder = currentFolder.items.find(
           (item) => "folderName" in item && item.folderName === part
-        ) as TemplateFolder | undefined
-        
+        ) as TemplateFolder | undefined;
+
         if (!targetFolder) {
-          toast.error(`Folder not found: ${part}`)
-          return
+          toast.error(`Folder not found: ${part}`);
+          return;
         }
-        
-        currentFolder = targetFolder
+
+        currentFolder = targetFolder;
       }
-      
+
       currentFolder.items = currentFolder.items.filter(
-        (item) => !("folderName" in item && item.folderName === folder.folderName)
-      )
-      
-      setTemplateData(updatedTemplateData)
-      await SaveUpdatedCode(id, updatedTemplateData)
-      toast.success(`Deleted folder: ${folder.folderName}`)
+        (item) =>
+          !("folderName" in item && item.folderName === folder.folderName)
+      );
+
+      setTemplateData(updatedTemplateData);
+      await SaveUpdatedCode(id, updatedTemplateData);
+      toast.success(`Deleted folder: ${folder.folderName}`);
     } catch (error) {
-      console.error("Error deleting folder:", error)
-      toast.error("Failed to delete folder")
+      console.error("Error deleting folder:", error);
+      toast.error("Failed to delete folder");
     }
-  }
-  
+  };
+
   // Rename functions
   const handleRenameFile = async (
     file: TemplateFile,
@@ -541,156 +705,216 @@ const MainPlaygroundPage: React.FC = () => {
     newExtension: string,
     parentPath: string
   ) => {
-    if (!templateData || !id) return
-    
-    const oldFileId = generateFileId(file)
-    const newFile = { ...file, filename: newFilename, fileExtension: newExtension }
-    const newFileId = generateFileId(newFile)
-    
-    const isOpen = openFiles.some((f) => f.id === oldFileId)
-    
+    if (!templateData || !id) return;
+
+    const oldFileId = generateFileId(file);
+    const newFile = {
+      ...file,
+      filename: newFilename,
+      fileExtension: newExtension,
+    };
+    const newFileId = generateFileId(newFile);
+
+    const isOpen = openFiles.some((f) => f.id === oldFileId);
+
     if (isOpen) {
       setOpenFiles((prev) =>
         prev.map((f) => {
           if (f.id === oldFileId) {
-            return { ...f, ...newFile, id: newFileId }
+            return { ...f, ...newFile, id: newFileId };
           }
-          return f
+          return f;
         })
-      )
-      
+      );
+
       if (activeFileId === oldFileId) {
-        setActiveFileId(newFileId)
+        setActiveFileId(newFileId);
       }
     }
-    
-    const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder
-    
-    const updateFileInItems = (items: (TemplateFile | TemplateFolder)[]): (TemplateFile | TemplateFolder)[] => {
+
+    const updatedTemplateData = JSON.parse(
+      JSON.stringify(templateData)
+    ) as TemplateFolder;
+
+    const updateFileInItems = (
+      items: (TemplateFile | TemplateFolder)[]
+    ): (TemplateFile | TemplateFolder)[] => {
       return items.map((item) => {
         if ("folderName" in item) {
           return {
             ...item,
             items: updateFileInItems(item.items),
-          }
+          };
         } else {
-          if (item.filename === file.filename && item.fileExtension === file.fileExtension) {
-            return { ...item, filename: newFilename, fileExtension: newExtension }
+          if (
+            item.filename === file.filename &&
+            item.fileExtension === file.fileExtension
+          ) {
+            return {
+              ...item,
+              filename: newFilename,
+              fileExtension: newExtension,
+            };
           }
-          return item
+          return item;
         }
-      })
-    }
-    
+      });
+    };
+
     if (!parentPath) {
-      updatedTemplateData.items = updateFileInItems(updatedTemplateData.items)
+      updatedTemplateData.items = updateFileInItems(updatedTemplateData.items);
     } else {
-      const pathParts = parentPath.split("/")
-      let currentFolder = updatedTemplateData
-      
+      const pathParts = parentPath.split("/");
+      let currentFolder = updatedTemplateData;
+
       for (const part of pathParts) {
         const folder = currentFolder.items.find(
           (item) => "folderName" in item && item.folderName === part
-        ) as TemplateFolder | undefined
-        
+        ) as TemplateFolder | undefined;
+
         if (!folder) {
-          toast.error(`Folder not found: ${part}`)
-          return
+          toast.error(`Folder not found: ${part}`);
+          return;
         }
-        
-        currentFolder = folder
+
+        currentFolder = folder;
       }
-      
-      currentFolder.items = updateFileInItems(currentFolder.items)
+
+      currentFolder.items = updateFileInItems(currentFolder.items);
     }
-    
+
     try {
-      await SaveUpdatedCode(id, updatedTemplateData)
-      setTemplateData(updatedTemplateData)
-      toast.success(`Renamed file to: ${newFilename}.${newExtension}`)
+      await SaveUpdatedCode(id, updatedTemplateData);
+      setTemplateData(updatedTemplateData);
+      toast.success(`Renamed file to: ${newFilename}.${newExtension}`);
     } catch (error) {
-      console.error("Error renaming file:", error)
-      toast.error("Failed to rename file")
+      console.error("Error renaming file:", error);
+      toast.error("Failed to rename file");
     }
-  }
-  
-  const handleRenameFolder = async (folder: TemplateFolder, newFolderName: string, parentPath: string) => {
-    if (!templateData || !id) return
-    
-    const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder
-    
+  };
+
+  const handleRenameFolder = async (
+    folder: TemplateFolder,
+    newFolderName: string,
+    parentPath: string
+  ) => {
+    if (!templateData || !id) return;
+
+    const updatedTemplateData = JSON.parse(
+      JSON.stringify(templateData)
+    ) as TemplateFolder;
+
     if (!parentPath) {
       updatedTemplateData.items = updatedTemplateData.items.map((item) => {
         if ("folderName" in item && item.folderName === folder.folderName) {
-          return { ...item, folderName: newFolderName }
+          return { ...item, folderName: newFolderName };
         }
-        return item
-      })
+        return item;
+      });
     } else {
-      const pathParts = parentPath.split("/")
-      let currentFolder = updatedTemplateData
-      
+      const pathParts = parentPath.split("/");
+      let currentFolder = updatedTemplateData;
+
       for (const part of pathParts) {
         const targetFolder = currentFolder.items.find(
           (item) => "folderName" in item && item.folderName === part
-        ) as TemplateFolder | undefined
-        
+        ) as TemplateFolder | undefined;
+
         if (!targetFolder) {
-          toast.error(`Folder not found: ${part}`)
-          return
+          toast.error(`Folder not found: ${part}`);
+          return;
         }
-        
-        currentFolder = targetFolder
+
+        currentFolder = targetFolder;
       }
-      
+
       currentFolder.items = currentFolder.items.map((item) => {
         if ("folderName" in item && item.folderName === folder.folderName) {
-          return { ...item, folderName: newFolderName }
+          return { ...item, folderName: newFolderName };
         }
-        return item
-      })
+        return item;
+      });
     }
-    
+
     try {
-      await SaveUpdatedCode(id, updatedTemplateData)
-      setTemplateData(updatedTemplateData)
-      toast.success(`Renamed folder to: ${newFolderName}`)
+      await SaveUpdatedCode(id, updatedTemplateData);
+      setTemplateData(updatedTemplateData);
+      toast.success(`Renamed folder to: ${newFolderName}`);
     } catch (error) {
-      console.error("Error renaming folder:", error)
-      toast.error("Failed to rename folder")
+      console.error("Error renaming folder:", error);
+      toast.error("Failed to rename folder");
     }
-  }
-  
+  };
+
   // Editor functions
   const handleEditorDidMount = (editor: any, monaco: Monaco) => {
-    editorRef.current = editor
-    monacoRef.current = monaco
-    
-    editor.updateOptions(defaultEditorOptions)
-    configureMonaco(monaco)
-    
+    editorRef.current = editor;
+    monacoRef.current = monaco;
+
+    editor.updateOptions(defaultEditorOptions);
+    configureMonaco(monaco);
+
+    // Add AI suggestion keyboard shortcuts
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Space, () => {
+      fetchCodeSuggestion("completion");
+    });
+
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
+      acceptCurrentSuggestion();
+    });
+
+    editor.addCommand(monaco.KeyCode.Escape, () => {
+      if (suggestion) {
+        rejectCurrentSuggestion();
+      }
+    });
+
+    // Add CSS for ghost text
+    const style = document.createElement("style");
+    style.textContent = `
+      .suggestion-ghost-text {
+        opacity: 0.6;
+      }
+      .suggestion-inline-text {
+        color: #888;
+        font-style: italic;
+        opacity: 0.7;
+      }
+    `;
+    document.head.appendChild(style);
+
     setTimeout(() => {
-      updateEditorLanguage()
-    }, 100)
-  }
-  
+      updateEditorLanguage();
+    }, 100);
+  };
+
   const updateEditorLanguage = () => {
-    if (!activeFile || !monacoRef.current || !editorRef.current) return
-    
-    const model = editorRef.current.getModel()
-    if (!model) return
-    
-    const language = getEditorLanguage(activeFile.fileExtension || "")
-    
+    if (!activeFile || !monacoRef.current || !editorRef.current) return;
+
+    const model = editorRef.current.getModel();
+    if (!model) return;
+
+    const language = getEditorLanguage(activeFile.fileExtension || "");
+
     try {
-      monacoRef.current.editor.setModelLanguage(model, language)
+      monacoRef.current.editor.setModelLanguage(model, language);
     } catch (error) {
-      console.warn("Failed to set editor language:", error)
+      console.warn("Failed to set editor language:", error);
     }
-  }
-  
+  };
+
+  // Ref for debounce timeout
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const handleEditorChange = (value: string | undefined) => {
     if (value === undefined || !activeFile) return;
+
+    // Clear existing suggestion when content changes
+    if (suggestion) {
+      setSuggestion(null);
+      setSuggestionPosition(null);
+      setSuggestionDecoration([]);
+    }
 
     setEditorContent(value);
 
@@ -709,53 +933,104 @@ const MainPlaygroundPage: React.FC = () => {
       })
     );
 
-    // Optionally, you can call handleSave here if you want immediate saving
-    // handleSave(activeFile.id);
-  }
-  
+    // Trigger suggestion on certain characters
+    const lastChar = value.slice(-1);
+    if ([".", "(", "{", " ", "\n"].includes(lastChar)) {
+      debouncedSuggestion();
+    }
+  };
+
+  const acceptCurrentSuggestion = () => {
+    if (!suggestion || !suggestionPosition || !editorRef.current) return;
+
+    const { line, column } = suggestionPosition;
+    const model = editorRef.current.getModel();
+
+    editorRef.current.executeEdits("", [
+      {
+        range: new monacoRef.current.Range(
+          line,
+          column,
+          line,
+          model.getLineMaxColumn(line)
+        ),
+        text: suggestion,
+      },
+    ]);
+
+    // Clear decorations
+    editorRef.current.deltaDecorations(suggestionDecoration, []);
+    setSuggestion(null);
+    setSuggestionPosition(null);
+    setSuggestionDecoration([]);
+  };
+
+  const rejectCurrentSuggestion = () => {
+    if (!editorRef.current) return;
+    editorRef.current.deltaDecorations(suggestionDecoration, []);
+    setSuggestion(null);
+    setSuggestionPosition(null);
+    setSuggestionDecoration([]);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        event.preventDefault();
+        acceptCurrentSuggestion();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [suggestion, suggestionPosition]);
   // Save functions
   const handleSave = async (fileId?: string) => {
-    const targetFileId = fileId || activeFileId
-    
-    if (!targetFileId || !templateData) return
-    
-    const fileToSave = openFiles.find((f) => f.id === targetFileId)
-    if (!fileToSave) return
-    
+    const targetFileId = fileId || activeFileId;
+
+    if (!targetFileId || !templateData) return;
+
+    const fileToSave = openFiles.find((f) => f.id === targetFileId);
+    if (!fileToSave) return;
+
     try {
-      const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder
-      
-      const updateFileContent = (items: (TemplateFile | TemplateFolder)[]): (TemplateFile | TemplateFolder)[] => {
+      const updatedTemplateData = JSON.parse(
+        JSON.stringify(templateData)
+      ) as TemplateFolder;
+
+      const updateFileContent = (
+        items: (TemplateFile | TemplateFolder)[]
+      ): (TemplateFile | TemplateFolder)[] => {
         return items.map((item) => {
           if ("folderName" in item) {
             return {
               ...item,
               items: updateFileContent(item.items),
-            }
+            };
           } else {
             if (generateFileId(item) === generateFileId(fileToSave)) {
               return {
                 ...item,
                 content: fileToSave.content,
-              }
+              };
             }
-            return item
+            return item;
           }
-        })
-      }
-      
-      updatedTemplateData.items = updateFileContent(updatedTemplateData.items)
-      
+        });
+      };
+
+      updatedTemplateData.items = updateFileContent(updatedTemplateData.items);
+
       if (writeFileSync) {
-        const path = findFilePath(fileToSave, updatedTemplateData)
+        const path = findFilePath(fileToSave, updatedTemplateData);
         if (path) {
-          await writeFileSync(path, fileToSave.content)
-          lastSyncedContent.current.set(fileToSave.id, fileToSave.content)
+          await writeFileSync(path, fileToSave.content);
+          lastSyncedContent.current.set(fileToSave.id, fileToSave.content);
         }
       }
-      
-      await SaveUpdatedCode(id, updatedTemplateData)
-      
+
+      await SaveUpdatedCode(id, updatedTemplateData);
+
       setOpenFiles((prev) =>
         prev.map((file) =>
           file.id === targetFileId
@@ -766,140 +1041,178 @@ const MainPlaygroundPage: React.FC = () => {
               }
             : file
         )
-      )
-      
-      toast.success(`Saved ${fileToSave.filename}.${fileToSave.fileExtension}`)
+      );
+
+      toast.success(`Saved ${fileToSave.filename}.${fileToSave.fileExtension}`);
     } catch (error) {
-      console.error("Error saving file:", error)
-      toast.error(`Failed to save ${fileToSave.filename}.${fileToSave.fileExtension}`)
+      console.error("Error saving file:", error);
+      toast.error(
+        `Failed to save ${fileToSave.filename}.${fileToSave.fileExtension}`
+      );
     }
-  }
-  
+  };
+
   const handleSaveAll = async () => {
-    const unsavedFiles = openFiles.filter((f) => f.hasUnsavedChanges)
-    
+    const unsavedFiles = openFiles.filter((f) => f.hasUnsavedChanges);
+
     if (unsavedFiles.length === 0) {
-      toast.info("No unsaved changes")
-      return
+      toast.info("No unsaved changes");
+      return;
     }
-    
+
     try {
-      await Promise.all(unsavedFiles.map((f) => handleSave(f.id)))
-      toast.success(`Saved ${unsavedFiles.length} file(s)`)
+      await Promise.all(unsavedFiles.map((f) => handleSave(f.id)));
+      toast.success(`Saved ${unsavedFiles.length} file(s)`);
     } catch (error) {
-      toast.error("Failed to save some files")
+      toast.error("Failed to save some files");
     }
-  }
-  
+  };
+
   // Run project function
   const handleRunProject = async () => {
     if (!instance) {
-      toast.error("WebContainer not ready")
-      return
+      toast.error("WebContainer not ready");
+      return;
     }
-    
-    setIsRunning(true)
-    
+
+    setIsRunning(true);
+
     try {
       // Save all files first
-      await handleSaveAll()
-      
+      await handleSaveAll();
+
       // Try to start the development server
-      const installProcess = await instance.spawn("npm", ["install"])
-      const installExitCode = await installProcess.exit
-      
+      const installProcess = await instance.spawn("npm", ["install"]);
+      const installExitCode = await installProcess.exit;
+
       if (installExitCode !== 0) {
-        toast.error("Failed to install dependencies")
-        return
+        toast.error("Failed to install dependencies");
+        return;
       }
-      
-      const devProcess = await instance.spawn("npm", ["run", "dev"])
-      toast.success("🚀 Project is running!")
+
+      const devProcess = await instance.spawn("npm", ["run", "dev"]);
+      toast.success("🚀 Project is running!");
     } catch (error) {
-      console.error("Error running project:", error)
-      toast.error("Failed to run project")
+      console.error("Error running project:", error);
+      toast.error("Failed to run project");
     } finally {
-      setIsRunning(false)
+      setIsRunning(false);
     }
-  }
-  
+  };
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "s") {
-        event.preventDefault()
-        
+        event.preventDefault();
+
         if (event.shiftKey) {
-          handleSaveAll()
+          handleSaveAll();
         } else {
-          handleSave()
+          handleSave();
         }
       }
-    }
-    
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [handleSave, handleSaveAll])
-  
+
+      // AI suggestion shortcuts
+      if ((event.ctrlKey || event.metaKey) && event.key === " ") {
+        event.preventDefault();
+        fetchCodeSuggestion("completion");
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        event.preventDefault();
+        acceptCurrentSuggestion();
+      }
+
+      if (event.key === "Escape" && suggestion) {
+        event.preventDefault();
+        rejectCurrentSuggestion();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleSave, handleSaveAll, suggestion]);
+
   // Effects
   useEffect(() => {
-    if (id) fetchPlaygroundTemplateData()
-  }, [id])
-  
+    if (id) fetchPlaygroundTemplateData();
+  }, [id]);
+
   useEffect(() => {
     if (activeFile) {
-      setEditorContent(activeFile.content)
-      
+      setEditorContent(activeFile.content);
+
       if (monacoRef.current && editorRef.current) {
         setTimeout(() => {
-          updateEditorLanguage()
-        }, 50)
+          updateEditorLanguage();
+        }, 50);
       }
     }
-  }, [activeFile])
-  
+  }, [activeFile]);
+
   // Cleanup
   useEffect(() => {
     return () => {
       if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current)
+        clearTimeout(autoSaveTimeoutRef.current);
       }
-      
+
       if (syncTimeoutRef.current) {
-        clearTimeout(syncTimeoutRef.current)
+        clearTimeout(syncTimeoutRef.current);
       }
-    }
-  }, [])
-  
+
+      if (suggestionTimeoutRef.current) {
+        clearTimeout(suggestionTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Render loading state
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] p-4">
         <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
-        <h2 className="text-xl font-semibold text-red-600 mb-2">Something went wrong</h2>
+        <h2 className="text-xl font-semibold text-red-600 mb-2">
+          Something went wrong
+        </h2>
         <p className="text-gray-600 mb-4">{error}</p>
         <Button
           onClick={() => {
-            setError(null)
-            fetchPlaygroundTemplateData()
+            setError(null);
+            fetchPlaygroundTemplateData();
           }}
           variant="destructive"
         >
           Try Again
         </Button>
       </div>
-    )
+    );
   }
-  
+
   if (loadingStep < 3) {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] p-4">
         <div className="w-full max-w-md p-6 rounded-lg shadow-sm border">
-          <h2 className="text-xl font-semibold mb-6 text-center">Loading Playground</h2>
+          <h2 className="text-xl font-semibold mb-6 text-center">
+            Loading Playground
+          </h2>
           <div className="mb-8">
-            <LoadingStep currentStep={loadingStep} step={1} label="Loading playground metadata" />
-            <LoadingStep currentStep={loadingStep} step={2} label="Loading template structure" />
-            <LoadingStep currentStep={loadingStep} step={3} label="Ready to explore" />
+            <LoadingStep
+              currentStep={loadingStep}
+              step={1}
+              label="Loading playground metadata"
+            />
+            <LoadingStep
+              currentStep={loadingStep}
+              step={2}
+              label="Loading template structure"
+            />
+            <LoadingStep
+              currentStep={loadingStep}
+              step={3}
+              label="Ready to explore"
+            />
           </div>
           <div className="w-full h-2 rounded-full overflow-hidden">
             <div
@@ -909,22 +1222,26 @@ const MainPlaygroundPage: React.FC = () => {
           </div>
         </div>
       </div>
-    )
+    );
   }
-  
+
   if (!templateData) {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] p-4">
         <FolderOpen className="h-12 w-12 text-amber-500 mb-4" />
-        <h2 className="text-xl font-semibold text-amber-600 mb-2">No template data available</h2>
-        <p className="text-gray-600 mb-4">The template appears to be empty or in an invalid format</p>
+        <h2 className="text-xl font-semibold text-amber-600 mb-2">
+          No template data available
+        </h2>
+        <p className="text-gray-600 mb-4">
+          The template appears to be empty or in an invalid format
+        </p>
         <Button onClick={loadTemplate} variant="outline">
           Reload Template
         </Button>
       </div>
-    )
+    );
   }
-  
+
   return (
     <TooltipProvider>
       <>
@@ -940,12 +1257,12 @@ const MainPlaygroundPage: React.FC = () => {
           onRenameFile={handleRenameFile}
           onRenameFolder={handleRenameFolder}
         />
-        
+
         <SidebarInset>
           <header className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
             <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="mr-2 h-4" />
-            
+
             <div className="flex flex-1 items-center gap-2">
               <div className="flex flex-col flex-1">
                 <h1 className="text-sm font-medium">
@@ -956,7 +1273,7 @@ const MainPlaygroundPage: React.FC = () => {
                   {hasUnsavedChanges && " • Unsaved changes"}
                 </p>
               </div>
-              
+
               <div className="flex items-center gap-1">
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -971,16 +1288,71 @@ const MainPlaygroundPage: React.FC = () => {
                   </TooltipTrigger>
                   <TooltipContent>Save (Ctrl+S)</TooltipContent>
                 </Tooltip>
-                
+
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button size="sm" variant="outline" onClick={handleSaveAll} disabled={!hasUnsavedChanges}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleSaveAll}
+                      disabled={!hasUnsavedChanges}
+                    >
                       <Save className="h-4 w-4" /> All
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>Save All (Ctrl+Shift+S)</TooltipContent>
                 </Tooltip>
-                
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => fetchCodeSuggestion("completion")}
+                      disabled={!activeFile || suggestionLoading}
+                    >
+                      {suggestionLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Get AI Suggestion (Ctrl+Space)
+                  </TooltipContent>
+                </Tooltip>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="outline" disabled={!activeFile}>
+                      <Lightbulb className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => fetchCodeSuggestion("completion")}
+                    >
+                      Code Completion
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => fetchCodeSuggestion("function")}
+                    >
+                      Function Suggestion
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => fetchCodeSuggestion("variable")}
+                    >
+                      Variable Suggestion
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => fetchCodeSuggestion("import")}
+                    >
+                      Import Suggestion
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button size="sm" variant="outline">
@@ -988,26 +1360,35 @@ const MainPlaygroundPage: React.FC = () => {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setIsPreviewVisible(!isPreviewVisible)}>
+                    <DropdownMenuItem
+                      onClick={() => setIsPreviewVisible(!isPreviewVisible)}
+                    >
                       {isPreviewVisible ? "Hide" : "Show"} Preview
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setIsTerminalVisible(!isTerminalVisible)}>
+                    <DropdownMenuItem
+                      onClick={() => setIsTerminalVisible(!isTerminalVisible)}
+                    >
                       {isTerminalVisible ? "Hide" : "Show"} Terminal
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={closeAllFiles}>Close All Files</DropdownMenuItem>
+                    <DropdownMenuItem onClick={closeAllFiles}>
+                      Close All Files
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
             </div>
           </header>
-          
+
           <div className="h-[calc(100vh-4rem)]">
             {openFiles.length > 0 ? (
               <div className="h-full flex flex-col">
                 {/* File Tabs */}
                 <div className="border-b bg-muted/30">
-                  <Tabs value={activeFileId || ""} onValueChange={setActiveFileId}>
+                  <Tabs
+                    value={activeFileId || ""}
+                    onValueChange={setActiveFileId}
+                  >
                     <div className="flex items-center justify-between px-4 py-2">
                       <TabsList className="h-8 bg-transparent p-0">
                         {openFiles.map((file) => (
@@ -1022,13 +1403,15 @@ const MainPlaygroundPage: React.FC = () => {
                                 <span>
                                   {file.filename}.{file.fileExtension}
                                 </span>
-                                {file.hasUnsavedChanges && <span className="h-2 w-2 rounded-full bg-orange-500" />}
+                                {file.hasUnsavedChanges && (
+                                  <span className="h-2 w-2 rounded-full bg-orange-500" />
+                                )}
                               </span>
                               <span
                                 className="ml-2 h-4 w-4 hover:bg-destructive hover:text-destructive-foreground rounded-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                                 onClick={(e) => {
-                                  e.stopPropagation()
-                                  closeFile(file.id)
+                                  e.stopPropagation();
+                                  closeFile(file.id);
                                 }}
                               >
                                 <X className="h-3 w-3" />
@@ -1037,32 +1420,56 @@ const MainPlaygroundPage: React.FC = () => {
                           </TabsTrigger>
                         ))}
                       </TabsList>
-                      
+
                       {openFiles.length > 1 && (
-                        <Button size="sm" variant="ghost" onClick={closeAllFiles} className="h-6 px-2 text-xs">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={closeAllFiles}
+                          className="h-6 px-2 text-xs"
+                        >
                           Close All
                         </Button>
                       )}
                     </div>
                   </Tabs>
                 </div>
-                
+
                 {/* Editor and Preview */}
                 <div className="flex-1">
-                  <ResizablePanelGroup direction="horizontal" className="h-full">
+                  <ResizablePanelGroup
+                    direction="horizontal"
+                    className="h-full"
+                  >
                     <ResizablePanel defaultSize={isPreviewVisible ? 50 : 100}>
                       <div className="h-full flex flex-col">
-                        <div className="flex-1">
+                        <div className="flex-1 relative">
+                          {/* AI Suggestion Overlay */}
+                          <AISuggestionOverlay
+                            suggestion={suggestion}
+                            isLoading={suggestionLoading}
+                            suggestionType={suggestionType}
+                            suggestionPosition={suggestionPosition}
+                            onAccept={acceptCurrentSuggestion}
+                            onReject={rejectCurrentSuggestion}
+                          />
+
                           <Editor
                             height="100%"
                             value={editorContent}
                             onChange={handleEditorChange}
                             onMount={handleEditorDidMount}
-                            language={activeFile ? getEditorLanguage(activeFile.fileExtension || "") : "plaintext"}
+                            language={
+                              activeFile
+                                ? getEditorLanguage(
+                                    activeFile.fileExtension || ""
+                                  )
+                                : "plaintext"
+                            }
                             options={defaultEditorOptions}
                           />
                         </div>
-                        
+
                         {isTerminalVisible && (
                           <>
                             <ResizableHandle />
@@ -1073,12 +1480,12 @@ const MainPlaygroundPage: React.FC = () => {
                         )}
                       </div>
                     </ResizablePanel>
-                    
+
                     {isPreviewVisible && (
                       <>
                         <ResizableHandle />
                         <ResizablePanel defaultSize={50}>
-                          <WebContainerPreview 
+                          <WebContainerPreview
                             templateData={templateData}
                             instance={instance}
                             writeFileSync={writeFileSync}
@@ -1097,22 +1504,28 @@ const MainPlaygroundPage: React.FC = () => {
                 <FileText className="h-16 w-16 text-gray-300" />
                 <div className="text-center">
                   <p className="text-lg font-medium">No files open</p>
-                  <p className="text-sm text-gray-500">Select a file from the sidebar to start editing</p>
+                  <p className="text-sm text-gray-500">
+                    Select a file from the sidebar to start editing
+                  </p>
                 </div>
               </div>
             )}
           </div>
         </SidebarInset>
-        
+
         {/* Confirmation Dialog */}
         <Dialog
           open={confirmationDialog.isOpen}
-          onOpenChange={(open) => setConfirmationDialog((prev) => ({ ...prev, isOpen: open }))}
+          onOpenChange={(open) =>
+            setConfirmationDialog((prev) => ({ ...prev, isOpen: open }))
+          }
         >
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{confirmationDialog.title}</DialogTitle>
-              <DialogDescription>{confirmationDialog.description}</DialogDescription>
+              <DialogDescription>
+                {confirmationDialog.description}
+              </DialogDescription>
             </DialogHeader>
             <DialogFooter>
               <Button variant="outline" onClick={confirmationDialog.onCancel}>
@@ -1124,7 +1537,9 @@ const MainPlaygroundPage: React.FC = () => {
         </Dialog>
       </>
     </TooltipProvider>
-  )
-}
+  );
+};
 
-export default MainPlaygroundPage
+export default MainPlaygroundPage;
+// Debounced AI suggestion trigger
+// Move this function inside MainPlaygroundPage to access suggestionTimeoutRef and fetchCodeSuggestion
