@@ -61,3 +61,8 @@ export async function longPoll<T>(
     }
   }
 }
+
+  // Helper function to generate unique file ID
+ export const generateFileId =(file: TemplateFile): string => {
+    return `${file.filename}.${file.fileExtension}`
+  }

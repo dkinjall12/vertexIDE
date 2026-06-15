@@ -1,9 +1,5 @@
 "use client"
 
-<<<<<<< HEAD
-import { PlaygroundProvider } from "@/features/playground/context/playground-context"
-import { PlaygroundLayout } from "@/features/playground/components/playground-layout"
-=======
 import type React from "react"
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Separator } from "@/components/ui/separator"
@@ -42,6 +38,7 @@ import { findFilePath } from "@/features/playground/libs"
 import { useWebContainer } from "@/features/webcontainers/hooks/useWebContainer"
 import type { TemplateFolder } from "@/features/playground/libs/path-to-json"
 import { AISuggestionOverlay } from "@/features/playground/components/ai-suggestion-overlay"
+import { useFileExplorer } from "@/features/playground/hooks/useFileExplorer"
 
 
 // Dynamic imports for components that don't need SSR
@@ -81,14 +78,12 @@ const MainPlaygroundPage: React.FC = () => {
 
   // Core state
   const [playgroundData, setPlaygroundData] = useState<PlaygroundData | null>(null)
-  const [templateData, setTemplateData] = useState<TemplateFolder | null>(null)
+
   const [loadingStep, setLoadingStep] = useState<number>(1)
   const [error, setError] = useState<string | null>(null)
 
   // Multi-file editor state
-  const [openFiles, setOpenFiles] = useState<OpenFile[]>([])
-  const [activeFileId, setActiveFileId] = useState<string | null>(null)
-  const [editorContent, setEditorContent] = useState<string>("")
+
 
   // UI state
   const [confirmationDialog, setConfirmationDialog] = useState<ConfirmationDialog>({
@@ -120,6 +115,10 @@ const MainPlaygroundPage: React.FC = () => {
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastSyncedContent = useRef<Map<string, string>>(new Map())
   const suggestionTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  const {activeFileId , closeAllFiles , openFile , closeFile , editorContent , updateFileContent , handleAddFile , handleAddFolder , handleDeleteFile , handleDeleteFolder,handleRenameFile,handleRenameFolder,openFiles,setTemplateData,templateData , setEditorContent , setOpenFiles ,setActiveFileId} = useFileExplorer()
+
+  console.log("OpenFiles" , openFiles)
 
   // WebContainer hook
   const {
@@ -224,16 +223,12 @@ const MainPlaygroundPage: React.FC = () => {
     }
   }, [isWebContainerInitialized, destroy])
 
-  // Helper function to generate unique file ID
-  const generateFileId = useCallback((file: TemplateFile): string => {
-    return `${file.filename}.${file.fileExtension}`
-  }, [])
 
   // Get active file
-  const activeFile = openFiles.find((file) => file.id === activeFileId)
+  const activeFile =  openFiles.find((file) => file.id === activeFileId) 
 
   // Check if there are any unsaved changes
-  const hasUnsavedChanges = openFiles.some((file) => file.hasUnsavedChanges)
+  const hasUnsavedChanges =  openFiles.some((file) => file.hasUnsavedChanges)
 
   // Debounced sync to WebContainer
   const debouncedSync = useCallback(
@@ -889,38 +884,10 @@ const MainPlaygroundPage: React.FC = () => {
   // Ref for debounce timeout
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  const handleEditorChange = (value: string | undefined) => {
-    if (value === undefined || !activeFile) return
-
-    // Clear existing suggestion when content changes
-    if (suggestion) {
-      clearSuggestion()
-    }
-
-    setEditorContent(value)
-
-    setOpenFiles((prev) =>
-      prev.map((file) => {
-        if (file.id === activeFile.id) {
-          const hasChanges = value !== file.originalContent
-
-          return {
-            ...file,
-            content: value,
-            hasUnsavedChanges: hasChanges,
-          }
-        }
-        return file
-      }),
-    )
-
-    // Trigger suggestion on certain characters
-    const lastChar = value.slice(-1)
-    if ([".", "(", "{", " ", "\n"].includes(lastChar)) {
-      debouncedSuggestion()
-    }
-  }
-
+  const handleEditorChange = useCallback((value: string | undefined) => {
+    if (!value || !activeFileId) return
+    updateFileContent(activeFileId, value)
+  }, [activeFileId, updateFileContent])
   const acceptCurrentSuggestion = () => {
     if (!suggestion || !suggestionPosition || !editorRef.current || !monacoRef.current) return;
 
@@ -1244,17 +1211,8 @@ const MainPlaygroundPage: React.FC = () => {
       </div>
     )
   }
->>>>>>> ca47670 (added terminal)
 
-export default function MainPlaygroundPage() {
   return (
-<<<<<<< HEAD
-    <PlaygroundProvider>
-      <PlaygroundLayout />
-    </PlaygroundProvider>
-  )
-}
-=======
     <TooltipProvider>
       <>
         {/* Sidebar and File Tree */}
@@ -1262,7 +1220,7 @@ export default function MainPlaygroundPage() {
           data={templateData}
           onFileSelect={handleFileSelect}
           selectedFile={activeFile}
-          title="Template Explorer"
+          title="File Explorer"
           onAddFile={handleAddFile}
           onAddFolder={handleAddFolder}
           onDeleteFile={handleDeleteFile}
@@ -1589,4 +1547,3 @@ export default function MainPlaygroundPage() {
 }
 
 export default MainPlaygroundPage
->>>>>>> ca47670 (added terminal)
