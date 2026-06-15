@@ -34,7 +34,7 @@ import WebContainerPreview from "@/features/webcontainers/components/webcontaine
 import LoadingStep from "@/components/ui/loader"
 import { configureMonaco, defaultEditorOptions, getEditorLanguage } from "@/features/playground/libs/editor-config"
 import dynamic from "next/dynamic"
-import { findFilePath } from "@/features/playground/libs"
+import { findFilePath, generateFileId } from "@/features/playground/libs"
 import { useWebContainer } from "@/features/webcontainers/hooks/useWebContainer"
 import type { TemplateFolder } from "@/features/playground/libs/path-to-json"
 import { AISuggestionOverlay } from "@/features/playground/components/ai-suggestion-overlay"
@@ -468,7 +468,7 @@ const MainPlaygroundPage: React.FC = () => {
               items: updateFileContent(item.items),
             }
           } else {
-            if (generateFileId(item) === generateFileId(fileToSave)) {
+            if (generateFileId(item , updatedTemplateData) === generateFileId(fileToSave , updatedTemplateData)) {
               return {
                 ...item,
                 content: fileToSave.content,
