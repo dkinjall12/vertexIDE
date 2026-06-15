@@ -80,8 +80,11 @@ interface ConfirmationDialog {
 }
 
 const MainPlaygroundPage: React.FC = () => {
-  const { id } = useParams<{ id: string }>()
-  
+  const { id } = useParams<{ id: string }>();
+
+  // Add a state to track WebContainer initialization
+  const [isWebContainerInitialized, setIsWebContainerInitialized] = useState(false);
+
   // Core state
   const [playgroundData, setPlaygroundData] = useState<PlaygroundData | null>(null)
   const [templateData, setTemplateData] = useState<TemplateFolder | null>(null)
@@ -112,18 +115,34 @@ const MainPlaygroundPage: React.FC = () => {
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastSyncedContent = useRef<Map<string, string>>(new Map())
   
-  // WebContainer hook - simplified without file syncing
+  // WebContainer hook
   const {
     serverUrl,
     isLoading: containerLoading,
     error: containerError,
     instance,
-    writeFileSync
+    writeFileSync,
+    destroy, // Ensure your WebContainer hook provides a destroy function
   } = useWebContainer({
-    // @ts-ignore
-    templateData: templateData,
-  })
-  
+    templateData,
+  });
+
+  // Initialize WebContainer only once
+  useEffect(() => {
+    if (!isWebContainerInitialized && instance) {
+      setIsWebContainerInitialized(true);
+    }
+  }, [instance, isWebContainerInitialized]);
+
+  // Cleanup WebContainer instance when exiting the playground
+  useEffect(() => {
+    return () => {
+      if (isWebContainerInitialized && destroy) {
+        destroy(); // Destroy the WebContainer instance
+      }
+    };
+  }, [isWebContainerInitialized, destroy]);
+
   // Helper function to generate unique file ID
   const generateFileId = useCallback((file: TemplateFile): string => {
     return `${file.filename}.${file.fileExtension}`
@@ -671,30 +690,27 @@ const MainPlaygroundPage: React.FC = () => {
   }
   
   const handleEditorChange = (value: string | undefined) => {
-    if (value === undefined || !activeFile) return
-    
-    setEditorContent(value)
-    
+    if (value === undefined || !activeFile) return;
+
+    setEditorContent(value);
+
     setOpenFiles((prev) =>
       prev.map((file) => {
         if (file.id === activeFile.id) {
-          const hasChanges = value !== file.originalContent
-          
-          if (hasChanges) {
-            debouncedSync({ ...file, content: value })
-          }
-          
+          const hasChanges = value !== file.originalContent;
+
           return {
             ...file,
             content: value,
             hasUnsavedChanges: hasChanges,
-          }
+          };
         }
-        return file
+        return file;
       })
-    )
-    
-    scheduleAutoSave()
+    );
+
+    // Optionally, you can call handleSave here if you want immediate saving
+    // handleSave(activeFile.id);
   }
   
   // Save functions

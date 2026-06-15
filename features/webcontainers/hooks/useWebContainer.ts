@@ -12,6 +12,7 @@ interface UseWebContainerReturn {
   error: string | null;
   instance: WebContainer | null;
   writeFileSync: (path: string, content: string) => Promise<void>;
+  destroy: () => void; // Added destroy function
 }
 
 export const useWebContainer = ({ templateData }: UseWebContainerProps): UseWebContainerReturn => {
@@ -64,5 +65,14 @@ export const useWebContainer = ({ templateData }: UseWebContainerProps): UseWebC
     }
   }, [instance]);
 
-  return { serverUrl, isLoading, error, instance, writeFileSync };
+  // Added destroy function
+  const destroy = useCallback(() => {
+    if (instance) {
+      instance.teardown();
+      setInstance(null);
+      setServerUrl(null);
+    }
+  }, [instance]);
+
+  return { serverUrl, isLoading, error, instance, writeFileSync, destroy };
 };
