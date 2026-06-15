@@ -13,11 +13,10 @@ import type { TemplateFile } from "@/features/playground/libs/path-to-json"
 import { useParams } from "next/navigation"
 import { getPlaygroundById, SaveUpdatedCode } from "@/features/playground/actions"
 import { toast } from "sonner"
-import { FileText, FolderOpen, AlertCircle, Save, X, Settings, Loader2, Sparkles, Lightbulb, Play, Terminal, Eye, EyeOff, Code2 } from "lucide-react"
+import { FileText, FolderOpen, AlertCircle, Save, X, Settings, Loader2, Sparkles, Lightbulb } from "lucide-react"
 import Editor, { type Monaco } from "@monaco-editor/react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
   DialogContent,
@@ -35,8 +34,6 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
-import { Card, CardContent } from "@/components/ui/card"
-import { Switch } from "@/components/ui/switch"
 import WebContainerPreview from "@/features/webcontainers/components/webcontainer-preveiw"
 import LoadingStep from "@/components/ui/loader"
 import { configureMonaco, defaultEditorOptions, getEditorLanguage } from "@/features/playground/libs/editor-config"
@@ -46,16 +43,12 @@ import { useWebContainer } from "@/features/webcontainers/hooks/useWebContainer"
 import type { TemplateFolder } from "@/features/playground/libs/path-to-json"
 import { AISuggestionOverlay } from "@/features/playground/components/ai-suggestion-overlay"
 
+
 // Dynamic imports for components that don't need SSR
 const TerminalAsync = dynamic(() => import("@/features/webcontainers/components/terminal"), {
   ssr: false,
   loading: () => (
-    <div className="flex items-center justify-center h-full text-muted-foreground bg-zinc-50 dark:bg-zinc-900 rounded-lg">
-      <div className="flex flex-col items-center gap-2">
-        <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
-        <span className="text-sm">Loading terminal...</span>
-      </div>
-    </div>
+    <div className="flex items-center justify-center h-full text-muted-foreground">Loading terminal...</div>
   ),
 })
 
@@ -139,6 +132,81 @@ const MainPlaygroundPage: React.FC = () => {
   } = useWebContainer({
     templateData,
   })
+
+ const fetchCodeSuggestion = async (suggestionType: string = "completion") => {
+  if (!isAISuggestionsEnabled || !activeFile || !editorRef.current) return;
+
+  const model = editorRef.current.getModel();
+  const cursorPosition = editorRef.current.getPosition();
+
+  const fileContent = model.getValue(); // Get full file content
+  const cursorLine = cursorPosition.lineNumber - 1; // Convert to 0-based index
+  const cursorColumn = cursorPosition.column - 1; // Same here
+
+  try {
+    const response = await fetch("/api/code-suggestion", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        fileContent,
+        cursorLine,
+        cursorColumn,
+        suggestionType: "completion",
+      }),
+    });
+
+    const data = await response.json();
+
+    if (data.suggestion && editorRef.current) {
+      const suggestionText = data.suggestion.trim();
+      setSuggestion(suggestionText);
+      setSuggestionPosition({ line: cursorPosition.lineNumber, column: cursorPosition.column });
+
+      // Highlight the suggestion as ghost text
+      applyGhostText(editorRef.current, suggestionText, cursorPosition.lineNumber, cursorPosition.column);
+    }
+  } catch (error) {
+    console.error("Error fetching code suggestion:", error);
+  }
+};
+  const applyGhostText = (
+    editor: any,
+    suggestion: string,
+    lineNumber: number,
+    column: number
+  ) => {
+    if (!editor) return;
+
+    const model = editor.getModel();
+    if (!model) return;
+
+    // Validate lineNumber
+    const totalLines = model.getLineCount();
+    if (lineNumber < 1 || lineNumber > totalLines) {
+      console.error(`Invalid lineNumber: ${lineNumber}. Total lines: ${totalLines}`);
+      return;
+    }
+
+    const endOfLine = model.getLineMaxColumn(lineNumber);
+
+    if (!monacoRef.current) return;
+
+    const decoration = [
+      {
+        range: new monacoRef.current.Range(lineNumber, column, lineNumber, endOfLine),
+        options: {
+          isWholeLine: false,
+          inlineClassName: "ghost-text",
+          hoverMessage: { value: `💡 AI Suggestion: ${suggestion}` },
+        },
+      },
+    ];
+
+    const newDecorations = editor.deltaDecorations(suggestionDecoration, decoration);
+    setSuggestionDecoration(newDecorations);
+  }
 
   // Initialize WebContainer only once
   useEffect(() => {
