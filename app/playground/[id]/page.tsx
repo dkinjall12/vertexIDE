@@ -146,7 +146,7 @@ const MainPlaygroundPage: React.FC = () => {
         fileContent,
         cursorLine,
         cursorColumn,
-        suggestionType: "completion",
+        suggestionType: suggestionType,
       }),
     });
 
@@ -223,9 +223,6 @@ const MainPlaygroundPage: React.FC = () => {
 
   // Check if there are any unsaved changes
   const hasUnsavedChanges =  openFiles.some((file) => file.hasUnsavedChanges)
-
- 
-
  
 
   // Fetch playground data
@@ -362,13 +359,12 @@ const MainPlaygroundPage: React.FC = () => {
     }
   }
 
-  // Ref for debounce timeout
-  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
+ 
   const handleEditorChange = useCallback((value: string | undefined) => {
     if (!value || !activeFileId) return
     updateFileContent(activeFileId, value)
   }, [activeFileId, updateFileContent])
+
   const acceptCurrentSuggestion = () => {
     if (!suggestion || !suggestionPosition || !editorRef.current || !monacoRef.current) return;
 
@@ -407,12 +403,10 @@ const MainPlaygroundPage: React.FC = () => {
   
   // Save functions
   const handleSave = async (fileId?: string) => {
-    console.log("Saving file:", fileId)
-
+   
 
     const targetFileId = fileId || activeFileId
 
-    console.log("targetFileId" , targetFileId)
     if (!targetFileId || !templateData) return
 
     const fileToSave = openFiles.find((f) => f.id === targetFileId)
