@@ -1,6 +1,6 @@
-"use client"
+"use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from "react";
 import { Terminal } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
 import { WebLinksAddon } from "xterm-addon-web-links";
@@ -15,16 +15,22 @@ interface TerminalProps {
   webcontainerUrl?: string;
   className?: string;
   theme?: "dark" | "light";
-  // Add WebContainer instance for direct communication
   webContainerInstance?: any;
 }
 
-const TerminalComponent: React.FC<TerminalProps> = ({ 
+// Define the methods that will be exposed through the ref
+export interface TerminalRef {
+  writeToTerminal: (data: string) => void;
+  clearTerminal: () => void;
+  focusTerminal: () => void;
+}
+
+const TerminalComponent = forwardRef<TerminalRef, TerminalProps>(({ 
   webcontainerUrl, 
   className,
   theme = "dark",
   webContainerInstance
-}) => {
+}, ref) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const term = useRef<Terminal | null>(null);
   const fitAddon = useRef<FitAddon | null>(null);
@@ -32,8 +38,14 @@ const TerminalComponent: React.FC<TerminalProps> = ({
   const [isConnected, setIsConnected] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [showSearch, setShowSearch] = useState(false);
-  const socketRef = useRef<WebSocket | null>(null);
-  const processRef = useRef<any>(null);
+  
+  // Command line state
+  const currentLine = useRef<string>("");
+  const cursorPosition = useRef<number>(0);
+  const commandHistory = useRef<string[]>([]);
+  const historyIndex = useRef<number>(-1);
+  const currentProcess = useRef<any>(null);
+  const shellProcess = useRef<any>(null);
 
   const terminalThemes = {
     dark: {
@@ -84,7 +96,182 @@ const TerminalComponent: React.FC<TerminalProps> = ({
     },
   };
 
-  const initializeTerminal = () => {
+  const writePrompt = useCallback(() => {
+    if (term.current) {
+      term.current.write("\r\n$ ");
+      currentLine.current = "";
+      cursorPosition.current = 0;
+    }
+  }, []);
+
+  // Expose methods through ref
+  useImperativeHandle(ref, () => ({
+    writeToTerminal: (data: string) => {
+      if (term.current) {
+        term.current.write(data);
+      }
+    },
+    clearTerminal: () => {
+      clearTerminal();
+    },
+    focusTerminal: () => {
+      if (term.current) {
+        term.current.focus();
+      }
+    },
+  }));
+
+  const executeCommand = useCallback(async (command: string) => {
+    if (!webContainerInstance || !term.current) return;
+
+    // Add to history
+    if (command.trim() && commandHistory.current[commandHistory.current.length - 1] !== command) {
+      commandHistory.current.push(command);
+    }
+    historyIndex.current = -1;
+
+    try {
+      // Handle built-in commands
+      if (command.trim() === "clear") {
+        term.current.clear();
+        writePrompt();
+        return;
+      }
+
+      if (command.trim() === "history") {
+        commandHistory.current.forEach((cmd, index) => {
+          term.current!.writeln(`  ${index + 1}  ${cmd}`);
+        });
+        writePrompt();
+        return;
+      }
+
+      if (command.trim() === "") {
+        writePrompt();
+        return;
+      }
+
+      // Parse command
+      const parts = command.trim().split(' ');
+      const cmd = parts[0];
+      const args = parts.slice(1);
+
+      // Execute in WebContainer
+      term.current.writeln("");
+      const process = await webContainerInstance.spawn(cmd, args, {
+        terminal: {
+          cols: term.current.cols,
+          rows: term.current.rows,
+        },
+      });
+
+      currentProcess.current = process;
+
+      // Handle process output
+      process.output.pipeTo(new WritableStream({
+        write(data) {
+          if (term.current) {
+            term.current.write(data);
+          }
+        },
+      }));
+
+      // Wait for process to complete
+      const exitCode = await process.exit;
+      currentProcess.current = null;
+
+      // Show new prompt
+      writePrompt();
+
+    } catch (error) {
+      if (term.current) {
+        term.current.writeln(`\r\nCommand not found: ${command}`);
+        writePrompt();
+      }
+      currentProcess.current = null;
+    }
+  }, [webContainerInstance, writePrompt]);
+
+  const handleTerminalInput = useCallback((data: string) => {
+    if (!term.current) return;
+
+    // Handle special characters
+    switch (data) {
+      case '\r': // Enter
+        executeCommand(currentLine.current);
+        break;
+        
+      case '\u007F': // Backspace
+        if (cursorPosition.current > 0) {
+          currentLine.current = 
+            currentLine.current.slice(0, cursorPosition.current - 1) + 
+            currentLine.current.slice(cursorPosition.current);
+          cursorPosition.current--;
+          
+          // Update terminal display
+          term.current.write('\b \b');
+        }
+        break;
+        
+      case '\u0003': // Ctrl+C
+        if (currentProcess.current) {
+          currentProcess.current.kill();
+          currentProcess.current = null;
+        }
+        term.current.writeln("^C");
+        writePrompt();
+        break;
+        
+      case '\u001b[A': // Up arrow
+        if (commandHistory.current.length > 0) {
+          if (historyIndex.current === -1) {
+            historyIndex.current = commandHistory.current.length - 1;
+          } else if (historyIndex.current > 0) {
+            historyIndex.current--;
+          }
+          
+          // Clear current line and write history command
+          const historyCommand = commandHistory.current[historyIndex.current];
+          term.current.write('\r$ ' + ' '.repeat(currentLine.current.length) + '\r$ ');
+          term.current.write(historyCommand);
+          currentLine.current = historyCommand;
+          cursorPosition.current = historyCommand.length;
+        }
+        break;
+        
+      case '\u001b[B': // Down arrow
+        if (historyIndex.current !== -1) {
+          if (historyIndex.current < commandHistory.current.length - 1) {
+            historyIndex.current++;
+            const historyCommand = commandHistory.current[historyIndex.current];
+            term.current.write('\r$ ' + ' '.repeat(currentLine.current.length) + '\r$ ');
+            term.current.write(historyCommand);
+            currentLine.current = historyCommand;
+            cursorPosition.current = historyCommand.length;
+          } else {
+            historyIndex.current = -1;
+            term.current.write('\r$ ' + ' '.repeat(currentLine.current.length) + '\r$ ');
+            currentLine.current = "";
+            cursorPosition.current = 0;
+          }
+        }
+        break;
+        
+      default:
+        // Regular character input
+        if (data >= ' ' || data === '\t') {
+          currentLine.current = 
+            currentLine.current.slice(0, cursorPosition.current) + 
+            data + 
+            currentLine.current.slice(cursorPosition.current);
+          cursorPosition.current++;
+          term.current.write(data);
+        }
+        break;
+    }
+  }, [executeCommand, writePrompt]);
+
+  const initializeTerminal = useCallback(() => {
     if (!terminalRef.current || term.current) return;
 
     const terminal = new Terminal({
@@ -115,124 +302,46 @@ const TerminalComponent: React.FC<TerminalProps> = ({
     searchAddon.current = searchAddonInstance;
     term.current = terminal;
 
+    // Handle terminal input
+    terminal.onData(handleTerminalInput);
+
     // Initial fit
     setTimeout(() => {
       fitAddonInstance.fit();
     }, 100);
 
     // Welcome message
-    terminal.writeln("🚀 WebContainer Terminal Ready");
-    terminal.writeln("Connected to your development environment");
-    terminal.write("$ ");
+    terminal.writeln("🚀 WebContainer Terminal");
+    terminal.writeln("Type 'help' for available commands");
+    writePrompt();
 
     return terminal;
-  };
+  }, [theme, handleTerminalInput, writePrompt]);
 
-  // Connect to WebContainer instance directly for better sync
-  const connectToWebContainer = async (terminal: Terminal) => {
-    if (!webContainerInstance) {
-      terminal.writeln("⚠️  WebContainer instance not available");
-      return;
-    }
+  const connectToWebContainer = useCallback(async () => {
+    if (!webContainerInstance || !term.current) return;
 
     try {
       setIsConnected(true);
-      terminal.clear();
-      terminal.writeln("✅ Connected to WebContainer");
-      terminal.writeln("Type commands to interact with your environment");
-      terminal.write("$ ");
-
-      // Handle terminal input and execute commands directly in WebContainer
-      terminal.onData(async (data) => {
-        // Handle special keys
-        if (data === '\r') { // Enter key
-          const currentLine = getCurrentCommandLine();
-          if (currentLine.trim()) {
-            terminal.writeln('');
-            await executeCommand(terminal, currentLine.trim());
-          } else {
-            terminal.writeln('');
-            terminal.write("$ ");
-          }
-        } else if (data === '\u007F') { // Backspace
-          terminal.write('\b \b');
-        } else if (data === '\u0003') { // Ctrl+C
-          if (processRef.current) {
-            processRef.current.kill();
-            processRef.current = null;
-          }
-          terminal.writeln('^C');
-          terminal.write("$ ");
-        } else {
-          terminal.write(data);
-        }
-      });
-
+      term.current.writeln("✅ Connected to WebContainer");
+      term.current.writeln("Ready to execute commands");
+      writePrompt();
     } catch (error) {
       setIsConnected(false);
-      terminal.writeln("❌ Failed to connect to WebContainer");
+      term.current.writeln("❌ Failed to connect to WebContainer");
       console.error("WebContainer connection error:", error);
     }
-  };
+  }, [webContainerInstance, writePrompt]);
 
-  // Execute command in WebContainer and stream output
-  const executeCommand = async (terminal: Terminal, command: string) => {
-    if (!webContainerInstance) {
-      terminal.writeln("❌ WebContainer not available");
-      terminal.write("$ ");
-      return;
-    }
-
-    try {
-      // Parse command and arguments
-      const parts = command.split(' ');
-      const cmd = parts[0];
-      const args = parts.slice(1);
-
-      // Start the process
-      const process = await webContainerInstance.spawn(cmd, args);
-      processRef.current = process;
-
-      // Stream stdout
-      process.output.pipeTo(new WritableStream({
-        write(data) {
-          terminal.write(data);
-        }
-      }));
-
-      // Wait for process to complete
-      const exitCode = await process.exit;
-      
-      // Clear process reference
-      processRef.current = null;
-      
-      // Show prompt again
-      terminal.writeln('');
-      terminal.write("$ ");
-
-    } catch (error) {
-      terminal.writeln(`❌ Command failed: ${error}`);
-      terminal.write("$ ");
-      processRef.current = null;
-    }
-  };
-
-  // Get current command line (simple implementation)
-  const getCurrentCommandLine = () => {
-    // This is a simplified version - in a real implementation,
-    // you'd track the current input more carefully
-    return '';
-  };
-
-  const clearTerminal = () => {
+  const clearTerminal = useCallback(() => {
     if (term.current) {
       term.current.clear();
-      term.current.writeln("🚀 WebContainer Terminal Ready");
-      term.current.write("$ ");
+      term.current.writeln("🚀 WebContainer Terminal");
+      writePrompt();
     }
-  };
+  }, [writePrompt]);
 
-  const copyTerminalContent = async () => {
+  const copyTerminalContent = useCallback(async () => {
     if (term.current) {
       const content = term.current.getSelection();
       if (content) {
@@ -243,9 +352,9 @@ const TerminalComponent: React.FC<TerminalProps> = ({
         }
       }
     }
-  };
+  }, []);
 
-  const downloadTerminalLog = () => {
+  const downloadTerminalLog = useCallback(() => {
     if (term.current) {
       const buffer = term.current.buffer.active;
       let content = "";
@@ -265,19 +374,16 @@ const TerminalComponent: React.FC<TerminalProps> = ({
       a.click();
       URL.revokeObjectURL(url);
     }
-  };
+  }, []);
 
-  const searchInTerminal = (term: string) => {
+  const searchInTerminal = useCallback((term: string) => {
     if (searchAddon.current && term) {
       searchAddon.current.findNext(term);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    const terminal = initializeTerminal();
-    if (terminal && webContainerInstance) {
-      connectToWebContainer(terminal);
-    }
+    initializeTerminal();
 
     // Handle resize
     const resizeObserver = new ResizeObserver(() => {
@@ -294,18 +400,24 @@ const TerminalComponent: React.FC<TerminalProps> = ({
 
     return () => {
       resizeObserver.disconnect();
-      if (socketRef.current) {
-        socketRef.current.close();
+      if (currentProcess.current) {
+        currentProcess.current.kill();
       }
-      if (processRef.current) {
-        processRef.current.kill();
+      if (shellProcess.current) {
+        shellProcess.current.kill();
       }
       if (term.current) {
         term.current.dispose();
         term.current = null;
       }
     };
-  }, [webContainerInstance, theme]);
+  }, [initializeTerminal]);
+
+  useEffect(() => {
+    if (webContainerInstance && term.current && !isConnected) {
+      connectToWebContainer();
+    }
+  }, [webContainerInstance, connectToWebContainer, isConnected]);
 
   return (
     <div className={cn("flex flex-col h-full bg-background border rounded-lg overflow-hidden", className)}>
@@ -391,6 +503,8 @@ const TerminalComponent: React.FC<TerminalProps> = ({
       </div>
     </div>
   );
-};
+});
+
+TerminalComponent.displayName = "TerminalComponent";
 
 export default TerminalComponent;
