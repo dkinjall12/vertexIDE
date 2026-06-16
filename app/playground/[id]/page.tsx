@@ -476,10 +476,16 @@ const MainPlaygroundPage: React.FC = () => {
     if (!fileToSave) return;
 
     try {
-      const updatedTemplateData = JSON.parse(
-        JSON.stringify(templateData)
-      ) as TemplateFolder;
+      // Clone template data
+      const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder;
 
+      // Find the file's path in the template structure
+      const filePath = findFilePath(fileToSave, updatedTemplateData);
+      if (!filePath) {
+        throw new Error(`Could not find path for file: ${fileToSave.filename}.${fileToSave.fileExtension}`);
+      }
+
+      // Update the file content in template data
       const updateFileContent = (
         items: (TemplateFile | TemplateFolder)[]
       ): (TemplateFile | TemplateFolder)[] => {
@@ -489,52 +495,52 @@ const MainPlaygroundPage: React.FC = () => {
               ...item,
               items: updateFileContent(item.items),
             };
-          } else {
-            if (
-              generateFileId(item, updatedTemplateData) ===
-              generateFileId(fileToSave, updatedTemplateData)
-            ) {
-              return {
-                ...item,
-                content: fileToSave.content,
-              };
-            }
-            return item;
+          } else if (
+            item.filename === fileToSave.filename &&
+            item.fileExtension === fileToSave.fileExtension
+          ) {
+            return {
+              ...item,
+              content: fileToSave.content,
+            };
           }
+          return item;
         });
       };
 
+      // Update template data with new content
       updatedTemplateData.items = updateFileContent(updatedTemplateData.items);
 
+      // Sync with WebContainer
       if (writeFileSync) {
-        const path = findFilePath(fileToSave, updatedTemplateData);
-        if (path) {
-          await writeFileSync(path, fileToSave.content);
-          lastSyncedContent.current.set(fileToSave.id, fileToSave.content);
-        }
+        await writeFileSync(filePath, fileToSave.content);
+        lastSyncedContent.current.set(fileToSave.id, fileToSave.content);
       }
 
+      // Save to backend (this should update both file content and structure)
       await SaveUpdatedCode(id, updatedTemplateData);
 
-      //  Update the openFiles array
-      const updatedOpenFiles = openFiles.map((f) => {
-        if (f.id === targetFileId) {
-          return {
-            ...f,
-            content: fileToSave.content,
-            hasUnsavedChanges: false,
-          };
-        }
-        return f;
-      });
+      // Update template data in state
+      setTemplateData(updatedTemplateData);
+
+      // Update open files
+      const updatedOpenFiles = openFiles.map((f) => 
+        f.id === targetFileId
+          ? {
+              ...f,
+              content: fileToSave.content,
+              originalContent: fileToSave.content,
+              hasUnsavedChanges: false,
+            }
+          : f
+      );
       setOpenFiles(updatedOpenFiles);
 
       toast.success(`Saved ${fileToSave.filename}.${fileToSave.fileExtension}`);
     } catch (error) {
       console.error("Error saving file:", error);
-      toast.error(
-        `Failed to save ${fileToSave.filename}.${fileToSave.fileExtension}`
-      );
+      toast.error(`Failed to save ${fileToSave.filename}.${fileToSave.fileExtension}`);
+      throw error; // Re-throw to handle in save all
     }
   };
 

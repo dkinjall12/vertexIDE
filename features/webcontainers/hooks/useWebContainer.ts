@@ -57,6 +57,15 @@ export const useWebContainer = ({ templateData }: UseWebContainerProps): UseWebC
     }
 
     try {
+      // Ensure the folder structure exists
+      const pathParts = path.split('/');
+      const folderPath = pathParts.slice(0, -1).join('/'); // Extract folder path
+
+      if (folderPath) {
+        await instance.fs.mkdir(folderPath, { recursive: true }); // Create folder structure recursively
+      }
+
+      // Write the file
       await instance.fs.writeFile(path, content);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to write file';
