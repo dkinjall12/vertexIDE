@@ -68,17 +68,6 @@ import { useFileExplorer } from "@/features/playground/hooks/useFileExplorer";
 import { Terminal as XTerm } from '@xterm/xterm'
 
 // Dynamic imports for components that don't need SSR
-const TerminalAsync = dynamic(
-  () => import("@/features/webcontainers/components/terminal"),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex items-center justify-center h-full text-muted-foreground">
-        Loading terminal...
-      </div>
-    ),
-  }
-);
 
 interface PlaygroundData {
   id: string;
