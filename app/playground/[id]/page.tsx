@@ -55,12 +55,6 @@ interface PlaygroundData {
   [key: string]: any
 }
 
-interface OpenFile extends TemplateFile {
-  id: string
-  hasUnsavedChanges: boolean
-  content: string
-  originalContent: string
-}
 
 interface ConfirmationDialog {
   isOpen: boolean
@@ -116,7 +110,7 @@ const MainPlaygroundPage: React.FC = () => {
   const lastSyncedContent = useRef<Map<string, string>>(new Map())
   const suggestionTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  const {activeFileId , closeAllFiles , openFile , closeFile , editorContent , updateFileContent , handleAddFile , handleAddFolder , handleDeleteFile , handleDeleteFolder,handleRenameFile,handleRenameFolder,openFiles,setTemplateData,templateData , setEditorContent , setOpenFiles ,setActiveFileId} = useFileExplorer()
+  const {activeFileId , closeAllFiles , openFile , closeFile , editorContent , updateFileContent , handleAddFile , handleAddFolder , handleDeleteFile , handleDeleteFolder,handleRenameFile,handleRenameFolder,openFiles,setTemplateData,templateData , setEditorContent , setOpenFiles ,setActiveFileId , setPlaygroundId} = useFileExplorer()
 
   console.log("OpenFiles" , openFiles)
 
@@ -230,51 +224,14 @@ const MainPlaygroundPage: React.FC = () => {
   // Check if there are any unsaved changes
   const hasUnsavedChanges =  openFiles.some((file) => file.hasUnsavedChanges)
 
-  // Debounced sync to WebContainer
-  const debouncedSync = useCallback(
-    (file: OpenFile) => {
-      if (!writeFileSync || !templateData) return
+ 
 
-      if (syncTimeoutRef.current) {
-        clearTimeout(syncTimeoutRef.current)
-      }
-
-      syncTimeoutRef.current = setTimeout(async () => {
-        try {
-          const path = findFilePath(file, templateData)
-          if (!path) {
-            console.error(`Could not find path for file: ${file.filename}.${file.fileExtension}`)
-            return
-          }
-
-          await writeFileSync(path, file.content)
-          lastSyncedContent.current.set(file.id, file.content)
-          console.log(`✅ Synced ${file.filename}.${file.fileExtension} to WebContainer`)
-        } catch (error) {
-          console.error("Failed to sync file to WebContainer:", error)
-        }
-      }, 500)
-    },
-    [templateData, writeFileSync],
-  )
-
-  // Auto-save functionality
-  const scheduleAutoSave = useCallback(() => {
-    if (autoSaveTimeoutRef.current) {
-      clearTimeout(autoSaveTimeoutRef.current)
-    }
-
-    if (!activeFile || !activeFile.hasUnsavedChanges) return
-
-    autoSaveTimeoutRef.current = setTimeout(() => {
-      handleSave(activeFile.id)
-    }, 3000)
-  }, [activeFile])
+ 
 
   // Fetch playground data
   const fetchPlaygroundTemplateData = async () => {
     if (!id) return
-
+  
     try {
       setLoadingStep(1)
       setError(null)
@@ -450,8 +407,12 @@ const MainPlaygroundPage: React.FC = () => {
   
   // Save functions
   const handleSave = async (fileId?: string) => {
+    console.log("Saving file:", fileId)
+
+
     const targetFileId = fileId || activeFileId
 
+    console.log("targetFileId" , targetFileId)
     if (!targetFileId || !templateData) return
 
     const fileToSave = openFiles.find((f) => f.id === targetFileId)
@@ -491,17 +452,18 @@ const MainPlaygroundPage: React.FC = () => {
 
       await SaveUpdatedCode(id, updatedTemplateData)
 
-      setOpenFiles((prev) =>
-        prev.map((file) =>
-          file.id === targetFileId
-            ? {
-                ...file,
-                hasUnsavedChanges: false,
-                originalContent: file.content,
-              }
-            : file,
-        ),
-      )
+      //  Update the openFiles array
+      const updatedOpenFiles = openFiles.map((f) => {
+        if (f.id === targetFileId) {
+          return {
+            ...f,
+            content: fileToSave.content,
+            hasUnsavedChanges: false,
+          }
+        }
+        return f
+      })
+      setOpenFiles(updatedOpenFiles)
 
       toast.success(`Saved ${fileToSave.filename}.${fileToSave.fileExtension}`)
     } catch (error) {
@@ -527,36 +489,7 @@ const MainPlaygroundPage: React.FC = () => {
   }
 
   // Run project function
-  const handleRunProject = async () => {
-    if (!instance) {
-      toast.error("WebContainer not ready")
-      return
-    }
 
-    setIsRunning(true)
-
-    try {
-      // Save all files first
-      await handleSaveAll()
-
-      // Try to start the development server
-      const installProcess = await instance.spawn("npm", ["install"])
-      const installExitCode = await installProcess.exit
-
-      if (installExitCode !== 0) {
-        toast.error("Failed to install dependencies")
-        return
-      }
-
-      const devProcess = await instance.spawn("npm", ["run", "dev"])
-      toast.success("🚀 Project is running!")
-    } catch (error) {
-      console.error("Error running project:", error)
-      toast.error("Failed to run project")
-    } finally {
-      setIsRunning(false)
-    }
-  }
 
   const clearSuggestion = () => {
     if (editorRef.current) {
@@ -567,15 +500,7 @@ const MainPlaygroundPage: React.FC = () => {
     setSuggestionDecoration([])
   }
 
-  const debouncedSuggestion = () => {
-    if (debounceTimeoutRef.current) {
-      clearTimeout(debounceTimeoutRef.current)
-    }
 
-    debounceTimeoutRef.current = setTimeout(() => {
-      fetchCodeSuggestion()
-    }, 500)
-  }
 
   const rejectCurrentSuggestion = () => {
     clearSuggestion()
@@ -590,7 +515,9 @@ const MainPlaygroundPage: React.FC = () => {
         if (event.shiftKey) {
           handleSaveAll()
         } else {
-          handleSave()
+          handleSave(
+            openFiles.find((f) => f.id === activeFileId)?.id
+          )
         }
       }
 
@@ -613,10 +540,17 @@ const MainPlaygroundPage: React.FC = () => {
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [suggestion])
+  }, [
+    activeFileId,
+    openFiles,
+    suggestion,
+    suggestionPosition,
+  ])
 
   // Effects
   useEffect(() => {
+    setPlaygroundId(id)
+
     if (id) fetchPlaygroundTemplateData()
   }, [id])
 
