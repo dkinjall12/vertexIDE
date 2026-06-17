@@ -173,6 +173,11 @@ const MainPlaygroundPage: React.FC = () => {
       if (writeFileSync) {
         await writeFileSync(filePath, fileToSave.content);
         lastSyncedContent.current.set(fileToSave.id, fileToSave.content);
+
+        // Reflect changes in WebContainer without restarting
+        if (instance && instance.fs) {
+          await instance.fs.writeFile(filePath, fileToSave.content);
+        }
       }
 
       // Save to backend (this should update both file content and structure)
