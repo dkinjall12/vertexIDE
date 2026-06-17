@@ -1,4 +1,3 @@
-
 export interface TemplateFile {
   filename: string;
   fileExtension: string;
@@ -19,5 +18,12 @@ export interface LoadingStepProps {
   currentStep: number;
   step: number;
   label: string;
+}
+
+export interface OpenFile extends TemplateFile {
+  id: string;
+  hasUnsavedChanges: boolean;
+  content: string;
+  originalContent: string;
 }
 

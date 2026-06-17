@@ -1,16 +1,12 @@
 "use client";
 
-import type React from "react";
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useRef } from "react";
+import { useState, useCallback } from "react";
 import { Separator } from "@/components/ui/separator";
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { TemplateFileTree } from "@/features/playground/components/playground-explorer";
 import type { TemplateFile } from "@/features/playground/libs/path-to-json";
 import { useParams } from "next/navigation";
-import {
-  getPlaygroundById,
-  SaveUpdatedCode,
-} from "@/features/playground/actions";
 import { toast } from "sonner";
 import {
   FileText,
@@ -19,11 +15,7 @@ import {
   Save,
   X,
   Settings,
-  Loader2,
-  Sparkles,
-  Lightbulb,
 } from "lucide-react";
-import Editor, { type Monaco } from "@monaco-editor/react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -54,89 +46,33 @@ import {
 } from "@/components/ui/resizable";
 import WebContainerPreview from "@/features/webcontainers/components/webcontainer-preveiw";
 import LoadingStep from "@/components/ui/loader";
-import {
-  configureMonaco,
-  defaultEditorOptions,
-  getEditorLanguage,
-} from "@/features/playground/libs/editor-config";
-import dynamic from "next/dynamic";
-import { findFilePath, generateFileId } from "@/features/playground/libs";
-import { useWebContainer } from "@/features/webcontainers/hooks/useWebContainer";
-import type { TemplateFolder } from "@/features/playground/libs/path-to-json";
-import { AISuggestionOverlay } from "@/features/playground/components/ai-suggestion-overlay";
+import { PlaygroundEditor } from "@/features/playground/components/playground-editor";
+import ToggleAI from "@/features/playground/components/toggle-ai";
 import { useFileExplorer } from "@/features/playground/hooks/useFileExplorer";
-import { Terminal as XTerm } from '@xterm/xterm'
-
-// Dynamic imports for components that don't need SSR
-
-interface PlaygroundData {
-  id: string;
-  name?: string;
-  [key: string]: any;
-}
-
-interface ConfirmationDialog {
-  isOpen: boolean;
-  title: string;
-  description: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-}
+import { usePlayground } from "@/features/playground/hooks/usePlayground";
+import { useAISuggestions } from "@/features/playground/hooks/useAISuggestion";
+import { useWebContainer } from "@/features/webcontainers/hooks/useWebContainer";
+import { SaveUpdatedCode } from "@/features/playground/actions";
+import { TemplateFolder } from "@/features/playground/types";
+import { findFilePath } from "@/features/playground/libs";
 
 const MainPlaygroundPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
 
-  // Add a state to track WebContainer initialization
-  const [isWebContainerInitialized, setIsWebContainerInitialized] =
-    useState(false);
-
-  // Core state
-  const [playgroundData, setPlaygroundData] = useState<PlaygroundData | null>(
-    null
-  );
-
-  const [loadingStep, setLoadingStep] = useState<number>(1);
-  const [error, setError] = useState<string | null>(null);
- const [terminal, setTerminal] = useState<XTerm | null>(null)
-
-  // Handle terminal ready
-  const handleTerminalReady = useCallback((xterm: XTerm) => {
-    setTerminal(xterm)
-  }, [])
-  // Multi-file editor state
-
   // UI state
-  const [confirmationDialog, setConfirmationDialog] =
-    useState<ConfirmationDialog>({
-      isOpen: false,
-      title: "",
-      description: "",
-      onConfirm: () => {},
-      onCancel: () => {},
-    });
-  const [isTerminalVisible, setIsTerminalVisible] = useState(false);
+  const [confirmationDialog, setConfirmationDialog] = useState({
+    isOpen: false,
+    title: "",
+    description: "",
+    onConfirm: () => {},
+    onCancel: () => {},
+  });
   const [isPreviewVisible, setIsPreviewVisible] = useState(true);
 
-  // AI Suggestion state
-  const [suggestion, setSuggestion] = useState<string | null>(null);
-  const [suggestionLoading, setSuggestionLoading] = useState(false);
-  const [suggestionPosition, setSuggestionPosition] = useState<{
-    line: number;
-    column: number;
-  } | null>(null);
-  const [suggestionDecoration, setSuggestionDecoration] = useState<string[]>(
-    []
-  );
-  const [suggestionType, setSuggestionType] = useState<string>("completion");
-  const [isAISuggestionsEnabled, setIsAISuggestionsEnabled] = useState(true);
-  // Refs
-  const editorRef = useRef<any>(null);
-  const monacoRef = useRef<Monaco | null>(null);
-  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastSyncedContent = useRef<Map<string, string>>(new Map());
-  const suggestionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
+  // Custom hooks
+  const { playgroundData, templateData, isLoading, error, saveTemplateData } =
+    usePlayground(id);
+  const aiSuggestions = useAISuggestions();
   const {
     activeFileId,
     closeAllFiles,
@@ -152,321 +88,39 @@ const MainPlaygroundPage: React.FC = () => {
     handleRenameFolder,
     openFiles,
     setTemplateData,
-    templateData,
-    setEditorContent,
-    setOpenFiles,
     setActiveFileId,
     setPlaygroundId,
+    setOpenFiles,
   } = useFileExplorer();
 
-
-
-  // WebContainer hook
   const {
     serverUrl,
     isLoading: containerLoading,
     error: containerError,
     instance,
     writeFileSync,
-    destroy, // Ensure your WebContainer hook provides a destroy function
-  } = useWebContainer({
-    templateData,
-  });
-
-
-  const fetchCodeSuggestion = async (suggestionType: string = "completion") => {
-    if (!isAISuggestionsEnabled || !activeFile || !editorRef.current) return;
-
-    const model = editorRef.current.getModel();
-    const cursorPosition = editorRef.current.getPosition();
-
-    const fileContent = model.getValue(); // Get full file content
-    const cursorLine = cursorPosition.lineNumber - 1; // Convert to 0-based index
-    const cursorColumn = cursorPosition.column - 1; // Same here
-
-    try {
-      const response = await fetch("/api/code-suggestion", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          fileContent,
-          cursorLine,
-          cursorColumn,
-          suggestionType: suggestionType,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.suggestion && editorRef.current) {
-        const suggestionText = data.suggestion.trim();
-        setSuggestion(suggestionText);
-        setSuggestionPosition({
-          line: cursorPosition.lineNumber,
-          column: cursorPosition.column,
-        });
-
-        // Highlight the suggestion as ghost text
-        applyGhostText(
-          editorRef.current,
-          suggestionText,
-          cursorPosition.lineNumber,
-          cursorPosition.column
-        );
-      }
-    } catch (error) {
-      console.error("Error fetching code suggestion:", error);
+    // @ts-ignore
+  } = useWebContainer({ templateData });
+  const lastSyncedContent = useRef<Map<string, string>>(new Map());
+  // Set template data when playground loads
+  React.useEffect(() => {
+    if (templateData) {
+      setTemplateData(templateData);
     }
-  };
-  const applyGhostText = (
-    editor: any,
-    suggestion: string,
-    lineNumber: number,
-    column: number
-  ) => {
-    if (!editor) return;
+  }, [templateData, setTemplateData]);
 
-    const model = editor.getModel();
-    if (!model) return;
+  React.useEffect(() => {
+    setPlaygroundId(id);
+  }, [id, setPlaygroundId]);
 
-    // Validate lineNumber
-    const totalLines = model.getLineCount();
-    if (lineNumber < 1 || lineNumber > totalLines) {
-      console.error(
-        `Invalid lineNumber: ${lineNumber}. Total lines: ${totalLines}`
-      );
-      return;
-    }
-
-    const endOfLine = model.getLineMaxColumn(lineNumber);
-
-    if (!monacoRef.current) return;
-
-    const decoration = [
-      {
-        range: new monacoRef.current.Range(
-          lineNumber,
-          column,
-          lineNumber,
-          endOfLine
-        ),
-        options: {
-          isWholeLine: false,
-          inlineClassName: "ghost-text",
-          hoverMessage: { value: `💡 AI Suggestion: ${suggestion}` },
-        },
-      },
-    ];
-
-    const newDecorations = editor.deltaDecorations(
-      suggestionDecoration,
-      decoration
-    );
-    setSuggestionDecoration(newDecorations);
-  };
-
-  // Initialize WebContainer only once
-  useEffect(() => {
-    if (!isWebContainerInitialized && instance) {
-      setIsWebContainerInitialized(true);
-    }
-  }, [instance, isWebContainerInitialized]);
-
-  // Cleanup WebContainer instance when exiting the playground
-  useEffect(() => {
-    return () => {
-      if (isWebContainerInitialized && destroy) {
-        destroy(); // Destroy the WebContainer instance
-      }
-    };
-  }, [isWebContainerInitialized, destroy]);
-
-  // Get active file
+ 
   const activeFile = openFiles.find((file) => file.id === activeFileId);
-
-  // Check if there are any unsaved changes
   const hasUnsavedChanges = openFiles.some((file) => file.hasUnsavedChanges);
-
-  // Fetch playground data
-  const fetchPlaygroundTemplateData = async () => {
-    if (!id) return;
-
-    try {
-      setLoadingStep(1);
-      setError(null);
-
-      const data = await getPlaygroundById(id);
-      // @ts-ignore
-      setPlaygroundData(data);
-
-      const rawContent = data?.templateFiles?.[0]?.content;
-      if (typeof rawContent === "string") {
-        const parsedContent = JSON.parse(rawContent);
-        setTemplateData(parsedContent);
-        setLoadingStep(3);
-        toast.success("Loaded template from saved content");
-        return;
-      }
-
-      setLoadingStep(2);
-      toast.success("Playground metadata loaded");
-      await loadTemplate();
-    } catch (error) {
-      console.error("Error loading playground:", error);
-      setError("Failed to load playground data");
-      toast.error("Failed to load playground data");
-    }
-  };
-
-  const loadTemplate = async () => {
-    if (!id) return;
-
-    try {
-      setLoadingStep(2);
-      const res = await fetch(`/api/template/${id}`);
-
-      if (!res.ok) throw new Error(`Failed to load template: ${res.status}`);
-
-      const data = await res.json();
-
-      if (data.templateJson && Array.isArray(data.templateJson)) {
-        setTemplateData({
-          folderName: "Root",
-          items: data.templateJson,
-        });
-      } else {
-        setTemplateData(
-          data.templateJson || {
-            folderName: "Root",
-            items: [],
-          }
-        );
-      }
-
-      setLoadingStep(3);
-      toast.success("Template loaded successfully");
-    } catch (error) {
-      console.error("Error loading template:", error);
-      setError("Failed to load template data");
-      toast.error("Failed to load template data");
-    }
-  };
-
-  // File management functions
 
   const handleFileSelect = (file: TemplateFile) => {
     openFile(file);
   };
 
-  // Editor functions
-  const handleEditorDidMount = (editor: any, monaco: Monaco) => {
-    editorRef.current = editor;
-    monacoRef.current = monaco;
-
-    editor.updateOptions(defaultEditorOptions);
-    configureMonaco(monaco);
-
-    // Add AI suggestion keyboard shortcuts
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Space, () => {
-      fetchCodeSuggestion("completion");
-    });
-
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
-      acceptCurrentSuggestion();
-    });
-
-    editor.addCommand(monaco.KeyCode.Escape, () => {
-      if (suggestion) {
-        rejectCurrentSuggestion();
-      }
-    });
-
-    // Add CSS for ghost text
-    const style = document.createElement("style");
-    style.textContent = `
-      .suggestion-ghost-text {
-        opacity: 0.6;
-      }
-      .suggestion-inline-text {
-        color: #888;
-        font-style: italic;
-        opacity: 0.7;
-      }
-    `;
-    document.head.appendChild(style);
-
-    setTimeout(() => {
-      updateEditorLanguage();
-    }, 100);
-  };
-
-  const updateEditorLanguage = () => {
-    if (!activeFile || !monacoRef.current || !editorRef.current) return;
-
-    const model = editorRef.current.getModel();
-    if (!model) return;
-
-    const language = getEditorLanguage(activeFile.fileExtension || "");
-
-    try {
-      monacoRef.current.editor.setModelLanguage(model, language);
-    } catch (error) {
-      console.warn("Failed to set editor language:", error);
-    }
-  };
-
-  const handleEditorChange = useCallback(
-    (value: string | undefined) => {
-      if (!value || !activeFileId) return;
-      updateFileContent(activeFileId, value);
-    },
-    [activeFileId, updateFileContent]
-  );
-
-  const acceptCurrentSuggestion = () => {
-    if (
-      !suggestion ||
-      !suggestionPosition ||
-      !editorRef.current ||
-      !monacoRef.current
-    )
-      return;
-
-    const { line, column } = suggestionPosition;
-    const model = editorRef.current.getModel();
-
-    // Ensure the suggestion does not include line numbers
-    const sanitizedSuggestion = suggestion.replace(/^\d+:\s*/gm, ""); // Remove any line numbers
-
-    editorRef.current.executeEdits("", [
-      {
-        range: new monacoRef.current.Range(line, column, line, column),
-        text: sanitizedSuggestion,
-        forceMoveMarkers: true,
-      },
-    ]);
-
-    // Clear decorations and reset suggestion state
-    editorRef.current.deltaDecorations(suggestionDecoration, []);
-    setSuggestion(null);
-    setSuggestionPosition(null);
-    setSuggestionDecoration([]);
-  };
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-        event.preventDefault();
-        acceptCurrentSuggestion();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [suggestion, suggestionPosition]);
-  // Save functions
   const handleSave = async (fileId?: string) => {
     const targetFileId = fileId || activeFileId;
 
@@ -477,12 +131,16 @@ const MainPlaygroundPage: React.FC = () => {
 
     try {
       // Clone template data
-      const updatedTemplateData = JSON.parse(JSON.stringify(templateData)) as TemplateFolder;
+      const updatedTemplateData = JSON.parse(
+        JSON.stringify(templateData)
+      ) as TemplateFolder;
 
       // Find the file's path in the template structure
       const filePath = findFilePath(fileToSave, updatedTemplateData);
       if (!filePath) {
-        throw new Error(`Could not find path for file: ${fileToSave.filename}.${fileToSave.fileExtension}`);
+        throw new Error(
+          `Could not find path for file: ${fileToSave.filename}.${fileToSave.fileExtension}`
+        );
       }
 
       // Update the file content in template data
@@ -524,7 +182,7 @@ const MainPlaygroundPage: React.FC = () => {
       setTemplateData(updatedTemplateData);
 
       // Update open files
-      const updatedOpenFiles = openFiles.map((f) => 
+      const updatedOpenFiles = openFiles.map((f) =>
         f.id === targetFileId
           ? {
               ...f,
@@ -539,7 +197,9 @@ const MainPlaygroundPage: React.FC = () => {
       toast.success(`Saved ${fileToSave.filename}.${fileToSave.fileExtension}`);
     } catch (error) {
       console.error("Error saving file:", error);
-      toast.error(`Failed to save ${fileToSave.filename}.${fileToSave.fileExtension}`);
+      toast.error(
+        `Failed to save ${fileToSave.filename}.${fileToSave.fileExtension}`
+      );
       throw error; // Re-throw to handle in save all
     }
   };
@@ -560,92 +220,23 @@ const MainPlaygroundPage: React.FC = () => {
     }
   };
 
-  // Run project function
+   // Add event to save file by click ctrl + s
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
 
-  const clearSuggestion = () => {
-    if (editorRef.current) {
-      editorRef.current.deltaDecorations(suggestionDecoration, []);
-    }
-    setSuggestion(null);
-    setSuggestionPosition(null);
-    setSuggestionDecoration([]);
-  };
+      if (e.ctrlKey && e.key === "s") {
 
-  const rejectCurrentSuggestion = () => {
-    clearSuggestion();
-  };
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key === "s") {
-        event.preventDefault();
-
-        if (event.shiftKey) {
-          handleSaveAll();
-        } else {
-          handleSave(openFiles.find((f) => f.id === activeFileId)?.id);
-        }
-      }
-
-      // AI suggestion shortcuts
-      if ((event.ctrlKey || event.metaKey) && event.key === " ") {
-        event.preventDefault();
-        fetchCodeSuggestion("completion");
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-        event.preventDefault();
-        acceptCurrentSuggestion();
-      }
-
-      if (event.key === "Escape" && suggestion) {
-        event.preventDefault();
-        rejectCurrentSuggestion();
+              e.preventDefault();
+        handleSave();
       }
     };
-
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeFileId, openFiles, suggestion, suggestionPosition]);
+  }, [handleSave]);
 
-  // Effects
-  useEffect(() => {
-    setPlaygroundId(id);
 
-    if (id) fetchPlaygroundTemplateData();
-  }, [id]);
-
-  useEffect(() => {
-    if (activeFile) {
-      setEditorContent(activeFile.content);
-
-      if (monacoRef.current && editorRef.current) {
-        setTimeout(() => {
-          updateEditorLanguage();
-        }, 50);
-      }
-    }
-  }, [activeFile]);
-
-  // Cleanup
-  useEffect(() => {
-    return () => {
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current);
-      }
-
-      if (syncTimeoutRef.current) {
-        clearTimeout(syncTimeoutRef.current);
-      }
-
-      if (suggestionTimeoutRef.current) {
-        clearTimeout(suggestionTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // Render loading state
+  // Run project function
+  // Error state
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] p-4">
@@ -654,20 +245,15 @@ const MainPlaygroundPage: React.FC = () => {
           Something went wrong
         </h2>
         <p className="text-gray-600 mb-4">{error}</p>
-        <Button
-          onClick={() => {
-            setError(null);
-            fetchPlaygroundTemplateData();
-          }}
-          variant="destructive"
-        >
+        <Button onClick={() => window.location.reload()} variant="destructive">
           Try Again
         </Button>
       </div>
     );
   }
 
-  if (loadingStep < 3) {
+  // Loading state
+  if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] p-4">
         <div className="w-full max-w-md p-6 rounded-lg shadow-sm border">
@@ -676,32 +262,23 @@ const MainPlaygroundPage: React.FC = () => {
           </h2>
           <div className="mb-8">
             <LoadingStep
-              currentStep={loadingStep}
+              currentStep={1}
               step={1}
-              label="Loading playground metadata"
+              label="Loading playground data"
             />
             <LoadingStep
-              currentStep={loadingStep}
+              currentStep={2}
               step={2}
-              label="Loading template structure"
+              label="Setting up environment"
             />
-            <LoadingStep
-              currentStep={loadingStep}
-              step={3}
-              label="Ready to explore"
-            />
-          </div>
-          <div className="w-full h-2 rounded-full overflow-hidden">
-            <div
-              className="bg-red-600 h-full transition-all duration-300 ease-in-out"
-              style={{ width: `${(loadingStep / 3) * 100}%` }}
-            />
+            <LoadingStep currentStep={3} step={3} label="Ready to code" />
           </div>
         </div>
       </div>
     );
   }
 
+  // No template data
   if (!templateData) {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] p-4">
@@ -709,10 +286,7 @@ const MainPlaygroundPage: React.FC = () => {
         <h2 className="text-xl font-semibold text-amber-600 mb-2">
           No template data available
         </h2>
-        <p className="text-gray-600 mb-4">
-          The template appears to be empty or in an invalid format
-        </p>
-        <Button onClick={loadTemplate} variant="outline">
+        <Button onClick={() => window.location.reload()} variant="outline">
           Reload Template
         </Button>
       </div>
@@ -757,7 +331,7 @@ const MainPlaygroundPage: React.FC = () => {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={handleSave}
+                      onClick={() => handleSave()}
                       disabled={!activeFile || !activeFile.hasUnsavedChanges}
                     >
                       <Save className="h-4 w-4" />
@@ -780,55 +354,23 @@ const MainPlaygroundPage: React.FC = () => {
                   <TooltipContent>Save All (Ctrl+Shift+S)</TooltipContent>
                 </Tooltip>
 
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => fetchCodeSuggestion("completion")}
-                      disabled={!activeFile || suggestionLoading}
-                    >
-                      {suggestionLoading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Sparkles className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    Get AI Suggestion (Ctrl+Space)
-                  </TooltipContent>
-                </Tooltip>
-
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="sm" variant="outline" disabled={!activeFile}>
-                      <Lightbulb className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      onClick={() => fetchCodeSuggestion("completion")}
-                    >
-                      Code Completion
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => fetchCodeSuggestion("function")}
-                    >
-                      Function Suggestion
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => fetchCodeSuggestion("variable")}
-                    >
-                      Variable Suggestion
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => fetchCodeSuggestion("import")}
-                    >
-                      Import Suggestion
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <ToggleAI
+                  isEnabled={aiSuggestions.isEnabled}
+                  onToggle={aiSuggestions.toggleEnabled}
+                  onCodeCompletion={() =>
+                    aiSuggestions.fetchSuggestion("completion", null)
+                  }
+                  onFunctionSuggestion={() =>
+                    aiSuggestions.fetchSuggestion("function", null)
+                  }
+                  onVariableSuggestion={() =>
+                    aiSuggestions.fetchSuggestion("variable", null)
+                  }
+                  onImportSuggestion={() =>
+                    aiSuggestions.fetchSuggestion("import", null)
+                  }
+                  suggestionLoading={aiSuggestions.isLoading}
+                />
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -842,38 +384,12 @@ const MainPlaygroundPage: React.FC = () => {
                     >
                       {isPreviewVisible ? "Hide" : "Show"} Preview
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setIsTerminalVisible(!isTerminalVisible)}
-                    >
-                      {isTerminalVisible ? "Hide" : "Show"} Terminal
-                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={closeAllFiles}>
                       Close All Files
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-
-                <div className="flex items-center gap-1">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="sm"
-                        variant={isAISuggestionsEnabled ? "outline" : "ghost"}
-                        onClick={() =>
-                          setIsAISuggestionsEnabled(!isAISuggestionsEnabled)
-                        }
-                      >
-                        {isAISuggestionsEnabled ? "Disable AI" : "Enable AI"}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {isAISuggestionsEnabled
-                        ? "Disable AI Suggestions"
-                        : "Enable AI Suggestions"}
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
               </div>
             </div>
           </header>
@@ -895,16 +411,14 @@ const MainPlaygroundPage: React.FC = () => {
                             value={file.id}
                             className="relative h-8 px-3 data-[state=active]:bg-background data-[state=active]:shadow-sm group"
                           >
-                            <div className="flex items-center gap-2 justify-center group">
-                              <span className="flex items-center gap-1">
-                                <FileText className="h-3 w-3" />
-                                <span>
-                                  {file.filename}.{file.fileExtension}
-                                </span>
-                                {file.hasUnsavedChanges && (
-                                  <span className="h-2 w-2 rounded-full bg-orange-500" />
-                                )}
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-3 w-3" />
+                              <span>
+                                {file.filename}.{file.fileExtension}
                               </span>
+                              {file.hasUnsavedChanges && (
+                                <span className="h-2 w-2 rounded-full bg-orange-500" />
+                              )}
                               <span
                                 className="ml-2 h-4 w-4 hover:bg-destructive hover:text-destructive-foreground rounded-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                                 onClick={(e) => {
@@ -940,46 +454,25 @@ const MainPlaygroundPage: React.FC = () => {
                     className="h-full"
                   >
                     <ResizablePanel defaultSize={isPreviewVisible ? 50 : 100}>
-                      <div className="h-full flex flex-col">
-                        <div className="flex-1 relative">
-                          {/* AI Suggestion Overlay */}
-                          <AISuggestionOverlay
-                            suggestion={suggestion}
-                            isLoading={suggestionLoading}
-                            suggestionType={suggestionType}
-                            suggestionPosition={suggestionPosition}
-                            onAccept={acceptCurrentSuggestion}
-                            onReject={rejectCurrentSuggestion}
-                          />
-
-                          <Editor
-                            height="100%"
-                            value={editorContent}
-                            onChange={handleEditorChange}
-                            onMount={handleEditorDidMount}
-                            language={
-                              activeFile
-                                ? getEditorLanguage(
-                                    activeFile.fileExtension || ""
-                                  )
-                                : "plaintext"
-                            }
-                            options={defaultEditorOptions}
-                          />
-                        </div>
-
-                        {/* {isTerminalVisible && (
-                          <>
-                            <ResizableHandle />
-                            <div className="h-64 border-t">
-                              <TerminalAsync 
-                              webContainerInstance={instance}
-                             webcontainerUrl={serverUrl!}  
-                              />
-                            </div>
-                          </>
-                        )} */}
-                      </div>
+                      <PlaygroundEditor
+                        activeFile={activeFile}
+                        content={editorContent}
+                        onContentChange={(value) =>
+                          activeFileId && updateFileContent(activeFileId, value)
+                        }
+                        suggestion={aiSuggestions.suggestion}
+                        suggestionLoading={aiSuggestions.isLoading}
+                        suggestionPosition={aiSuggestions.position}
+                        onAcceptSuggestion={() =>
+                          aiSuggestions.acceptSuggestion(null, null)
+                        }
+                        onRejectSuggestion={() =>
+                          aiSuggestions.rejectSuggestion(null)
+                        }
+                        onTriggerSuggestion={(type) =>
+                          aiSuggestions.fetchSuggestion(type, null)
+                        }
+                      />
                     </ResizablePanel>
 
                     {isPreviewVisible && (
@@ -994,7 +487,6 @@ const MainPlaygroundPage: React.FC = () => {
                             error={containerError}
                             serverUrl={serverUrl!}
                             forceResetup={false}
-                            
                           />
                         </ResizablePanel>
                       </>
