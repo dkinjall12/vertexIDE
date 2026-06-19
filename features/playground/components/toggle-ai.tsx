@@ -28,10 +28,7 @@ import { cn } from "@/lib/utils";
 interface ToggleAIProps {
   isEnabled: boolean;
   onToggle: (value: boolean) => void;
-  onCodeCompletion: () => void;
-  onFunctionSuggestion: () => void;
-  onVariableSuggestion: () => void;
-  onImportSuggestion: () => void;
+  
   suggestionLoading: boolean;
   loadingProgress?: number;
   activeFeature?: string;
@@ -40,10 +37,7 @@ interface ToggleAIProps {
 const ToggleAI: React.FC<ToggleAIProps> = ({
   isEnabled,
   onToggle,
-  onCodeCompletion,
-  onFunctionSuggestion,
-  onVariableSuggestion,
-  onImportSuggestion,
+
   suggestionLoading,
   loadingProgress = 0,
   activeFeature,
@@ -148,93 +142,7 @@ const ToggleAI: React.FC<ToggleAIProps> = ({
         
         <DropdownMenuSeparator />
         
-        <DropdownMenuItem
-          disabled={!isEnabled || suggestionLoading}
-          onClick={(e) => {
-            e.preventDefault();
-            onCodeCompletion();
-          }}
-          className={cn(
-            "py-2.5 cursor-pointer",
-            !isEnabled || suggestionLoading 
-              ? "opacity-50 cursor-not-allowed" 
-              : ""
-          )}
-        >
-          <div className="flex items-center gap-3 w-full">
-            <Code className="h-4 w-4 text-muted-foreground" />
-            <div className="flex-1">
-              <div className="text-sm font-medium">Code Completion</div>
-              <div className="text-xs text-muted-foreground">Ctrl+Space</div>
-            </div>
-          </div>
-        </DropdownMenuItem>
-        
-        <DropdownMenuItem
-          disabled={!isEnabled || suggestionLoading}
-          onClick={(e) => {
-            e.preventDefault();
-            onFunctionSuggestion();
-          }}
-          className={cn(
-            "py-2.5 cursor-pointer",
-            !isEnabled || suggestionLoading 
-              ? "opacity-50 cursor-not-allowed" 
-              : ""
-          )}
-        >
-          <div className="flex items-center gap-3 w-full">
-            <Braces className="h-4 w-4 text-muted-foreground" />
-            <div className="flex-1">
-              <div className="text-sm font-medium">Function Suggestion</div>
-              <div className="text-xs text-muted-foreground">Generate function templates</div>
-            </div>
-          </div>
-        </DropdownMenuItem>
-        
-        <DropdownMenuItem
-          disabled={!isEnabled || suggestionLoading}
-          onClick={(e) => {
-            e.preventDefault();
-            onVariableSuggestion();
-          }}
-          className={cn(
-            "py-2.5 cursor-pointer",
-            !isEnabled || suggestionLoading 
-              ? "opacity-50 cursor-not-allowed" 
-              : ""
-          )}
-        >
-          <div className="flex items-center gap-3 w-full">
-            <Variable className="h-4 w-4 text-muted-foreground" />
-            <div className="flex-1">
-              <div className="text-sm font-medium">Variable Suggestion</div>
-              <div className="text-xs text-muted-foreground">Smart naming conventions</div>
-            </div>
-          </div>
-        </DropdownMenuItem>
-        
-        <DropdownMenuItem
-          disabled={!isEnabled || suggestionLoading}
-          onClick={(e) => {
-            e.preventDefault();
-            onImportSuggestion();
-          }}
-          className={cn(
-            "py-2.5 cursor-pointer",
-            !isEnabled || suggestionLoading 
-              ? "opacity-50 cursor-not-allowed" 
-              : ""
-          )}
-        >
-          <div className="flex items-center gap-3 w-full">
-            <Import className="h-4 w-4 text-muted-foreground" />
-            <div className="flex-1">
-              <div className="text-sm font-medium">Import Suggestion</div>
-              <div className="text-xs text-muted-foreground">Auto-import detection</div>
-            </div>
-          </div>
-        </DropdownMenuItem>
+      
       </DropdownMenuContent>
     </DropdownMenu>
   );

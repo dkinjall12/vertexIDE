@@ -113,7 +113,6 @@ const MainPlaygroundPage: React.FC = () => {
     setPlaygroundId(id);
   }, [id, setPlaygroundId]);
 
- 
   const activeFile = openFiles.find((file) => file.id === activeFileId);
   const hasUnsavedChanges = openFiles.some((file) => file.hasUnsavedChanges);
 
@@ -225,7 +224,7 @@ const MainPlaygroundPage: React.FC = () => {
     }
   };
 
-   // Add event to save file by click ctrl + s
+// Add event to save file by click ctrl + s
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
 
@@ -362,18 +361,7 @@ const MainPlaygroundPage: React.FC = () => {
                 <ToggleAI
                   isEnabled={aiSuggestions.isEnabled}
                   onToggle={aiSuggestions.toggleEnabled}
-                  onCodeCompletion={() =>
-                    aiSuggestions.fetchSuggestion("completion", null)
-                  }
-                  onFunctionSuggestion={() =>
-                    aiSuggestions.fetchSuggestion("function", null)
-                  }
-                  onVariableSuggestion={() =>
-                    aiSuggestions.fetchSuggestion("variable", null)
-                  }
-                  onImportSuggestion={() =>
-                    aiSuggestions.fetchSuggestion("import", null)
-                  }
+                 
                   suggestionLoading={aiSuggestions.isLoading}
                 />
 
@@ -461,21 +449,21 @@ const MainPlaygroundPage: React.FC = () => {
                     <ResizablePanel defaultSize={isPreviewVisible ? 50 : 100}>
                       <PlaygroundEditor
                         activeFile={activeFile}
-                        content={editorContent}
+                        content={activeFile?.content || ""}
                         onContentChange={(value) =>
                           activeFileId && updateFileContent(activeFileId, value)
                         }
                         suggestion={aiSuggestions.suggestion}
                         suggestionLoading={aiSuggestions.isLoading}
                         suggestionPosition={aiSuggestions.position}
-                        onAcceptSuggestion={() =>
-                          aiSuggestions.acceptSuggestion(null, null)
+                        onAcceptSuggestion={(editor, monaco) =>
+                          aiSuggestions.acceptSuggestion(editor, monaco)
                         }
-                        onRejectSuggestion={() =>
-                          aiSuggestions.rejectSuggestion(null)
+                        onRejectSuggestion={(editor) =>
+                          aiSuggestions.rejectSuggestion(editor)
                         }
-                        onTriggerSuggestion={(type) =>
-                          aiSuggestions.fetchSuggestion(type, null)
+                        onTriggerSuggestion={(type, editor) =>
+                          aiSuggestions.fetchSuggestion(type, editor)
                         }
                       />
                     </ResizablePanel>

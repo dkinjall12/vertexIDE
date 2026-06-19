@@ -29,6 +29,8 @@ model User {
 
 
   myPlayground Playground[]
+  
+   chatMessages ChatMessage[] // New relation for chat messages
 
    createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
@@ -83,4 +85,18 @@ model TemplateFile {
   playground Playground @relation(fields: [playgroundId], references: [id], onDelete: Cascade)
 
 
+}
+
+
+// New model for AI chat messages
+model ChatMessage {
+  id        String   @id @default(cuid()) @map("_id")
+  userId    String
+  role      String   // "user" or "assistant"
+  content   String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

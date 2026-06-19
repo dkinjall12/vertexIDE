@@ -1,4 +1,3 @@
-
 import { useRef, useEffect } from 'react';
 import Editor, { type Monaco } from "@monaco-editor/react";
 import { configureMonaco, defaultEditorOptions, getEditorLanguage } from '@/features/playground/libs/editor-config';
@@ -12,9 +11,9 @@ interface PlaygroundEditorProps {
   suggestion: string | null;
   suggestionLoading: boolean;
   suggestionPosition: { line: number; column: number } | null;
-  onAcceptSuggestion: () => void;
-  onRejectSuggestion: () => void;
-  onTriggerSuggestion: (type: string) => void;
+  onAcceptSuggestion: (editor: any, monaco: any) => void;
+  onRejectSuggestion: (editor: any) => void;
+  onTriggerSuggestion: (type: string, editor: any) => void;
 }
 
 export const PlaygroundEditor = ({
@@ -35,20 +34,25 @@ export const PlaygroundEditor = ({
     editorRef.current = editor;
     monacoRef.current = monaco;
 
+    console.log("Editor instance mounted:", !!editorRef.current);
+
     editor.updateOptions(defaultEditorOptions);
     configureMonaco(monaco);
 
     // Keyboard shortcuts
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Space, () => {
-      onTriggerSuggestion("completion");
+      console.log("Ctrl+Space pressed, triggering suggestion");
+      onTriggerSuggestion("completion", editor);
     });
 
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
-      onAcceptSuggestion();
+      console.log("Ctrl+Enter pressed, accepting suggestion");
+      onAcceptSuggestion(editor, monaco);
     });
 
     editor.addCommand(monaco.KeyCode.Escape, () => {
-      if (suggestion) onRejectSuggestion();
+      console.log("Escape pressed, rejecting suggestion");
+      if (suggestion) onRejectSuggestion(editor);
     });
 
     updateEditorLanguage();
@@ -79,8 +83,8 @@ export const PlaygroundEditor = ({
         isLoading={suggestionLoading}
         suggestionType="completion"
         suggestionPosition={suggestionPosition}
-        onAccept={onAcceptSuggestion}
-        onReject={onRejectSuggestion}
+        onAccept={() => onAcceptSuggestion(editorRef.current, monacoRef.current)}
+        onReject={() => onRejectSuggestion(editorRef.current)}
       />
 
       <Editor
