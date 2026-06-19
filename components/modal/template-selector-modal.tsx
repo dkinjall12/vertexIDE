@@ -1,36 +1,53 @@
-"use client"
+"use client";
 
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Label } from "@/components/ui/label"
-import { ChevronRight, Search, Star, Code, Server, Globe, Zap, Clock, Check, Plus } from "lucide-react"
-import Image from "next/image"
-import { useState } from "react"
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Label } from "@/components/ui/label";
+import {
+  ChevronRight,
+  Search,
+  Star,
+  Code,
+  Server,
+  Globe,
+  Zap,
+  Clock,
+  Check,
+  Plus,
+} from "lucide-react";
+import Image from "next/image";
+import { useState } from "react";
 
 // TemplateSelectionModal.tsx
 type TemplateSelectionModalProps = {
-  isOpen: boolean
-  onClose: () => void
+  isOpen: boolean;
+  onClose: () => void;
   onSubmit: (data: {
-    title: string
-    template: "REACT" | "NEXTJS" | "EXPRESS"
-    description?: string
-  }) => void
-}
+    title: string;
+    template: "REACT" | "NEXTJS" | "EXPRESS" | "VUE" | "HONO" | "ANGULAR";
+    description?: string;
+  }) => void;
+};
 
 interface TemplateOption {
-  id: string
-  name: string
-  description: string
-  icon: string
-  color: string
-  popularity: number
-  tags: string[]
-  features: string[]
-  category: "frontend" | "backend" | "fullstack"
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  color: string;
+  popularity: number;
+  tags: string[];
+  features: string[];
+  category: "frontend" | "backend" | "fullstack";
 }
 
 const templates: TemplateOption[] = [
@@ -42,7 +59,11 @@ const templates: TemplateOption[] = [
     color: "#61DAFB",
     popularity: 5,
     tags: ["UI", "Frontend", "JavaScript"],
-    features: ["Component-Based", "Virtual DOM", "JSX Support"],
+    features: [
+      "Component-Based",
+      "Virtual DOM",
+      "JSX Support"
+    ],
     category: "frontend",
   },
   {
@@ -53,7 +74,11 @@ const templates: TemplateOption[] = [
     color: "#000000",
     popularity: 4,
     tags: ["React", "SSR", "Fullstack"],
-    features: ["Server Components", "API Routes", "File-based Routing"],
+    features: [
+      "Server Components",
+      "API Routes",
+      "File-based Routing"
+    ],
     category: "fullstack",
   },
   {
@@ -64,7 +89,11 @@ const templates: TemplateOption[] = [
     color: "#000000",
     popularity: 4,
     tags: ["Node.js", "API", "Backend"],
-    features: ["Middleware", "Routing", "HTTP Utilities"],
+    features: [
+      "Middleware",
+      "Routing",
+      "HTTP Utilities"
+    ],
     category: "backend",
   },
   {
@@ -75,108 +104,146 @@ const templates: TemplateOption[] = [
     color: "#4FC08D",
     popularity: 4,
     tags: ["UI", "Frontend", "JavaScript"],
-    features: ["Reactive Data Binding", "Component System", "Virtual DOM"],
+    features: [
+      "Reactive Data Binding",
+      "Component System",
+      "Virtual DOM"
+    ],
     category: "frontend",
   },
   {
-    id: "nestjs",
-    name: "NestJS",
-    description: "Progressive Node.js framework for building efficient and scalable server-side applications",
-    icon: "/nestjs-icon.svg",
-    color: "#E0234E",
+    id: "hono",
+    name: "Hono",
+    description: "Fast, lightweight, built on Web Standards. Support for any JavaScript runtime.",
+    icon: "/hono.svg",
+    color: "#e36002",
     popularity: 3,
     tags: ["Node.js", "TypeScript", "Backend"],
-    features: ["Dependency Injection", "TypeScript Support", "Modular Architecture"],
+    features: [
+      "Dependency Injection",
+      "TypeScript Support",
+      "Modular Architecture"
+    ],
     category: "backend",
   },
   {
-    id: "remix",
-    name: "Remix",
-    description:
-      "Full stack web framework that lets you focus on the user interface and work back through web standards",
-    icon: "/remixrun-icon.svg",
-    color: "#121212",
+    id: "angular",
+    name: "Angular",
+    description: "Angular is a web framework that empowers developers to build fast, reliable applications.",
+    icon: "/angular-2.svg",
+    color: "#DD0031",
     popularity: 3,
     tags: ["React", "Fullstack", "JavaScript"],
-    features: ["Nested Routes", "Data Loading", "Error Boundaries"],
+    features: [
+      "Reactive Data Binding",
+      "Component System",
+      "Virtual DOM",
+      "Dependency Injection",
+      "TypeScript Support"
+    ],
     category: "fullstack",
   },
-]
+];
 
-const TemplateSelectionModal = ({ isOpen, onClose, onSubmit }: TemplateSelectionModalProps) => {
-  const [step, setStep] = useState<"select" | "configure">("select")
-  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [category, setCategory] = useState<"all" | "frontend" | "backend" | "fullstack">("all")
-  const [projectName, setProjectName] = useState("")
+const TemplateSelectionModal = ({
+  isOpen,
+  onClose,
+  onSubmit,
+}: TemplateSelectionModalProps) => {
+  const [step, setStep] = useState<"select" | "configure">("select");
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [category, setCategory] = useState<
+    "all" | "frontend" | "backend" | "fullstack"
+  >("all");
+  const [projectName, setProjectName] = useState("");
 
   const filteredTemplates = templates.filter((template) => {
     const matchesSearch =
       template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       template.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      template.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()))
+      template.tags.some((tag) =>
+        tag.toLowerCase().includes(searchQuery.toLowerCase())
+      );
 
-    const matchesCategory = category === "all" || template.category === category
+    const matchesCategory =
+      category === "all" || template.category === category;
 
-    return matchesSearch && matchesCategory
-  })
+    return matchesSearch && matchesCategory;
+  });
 
   const handleSelectTemplate = (templateId: string) => {
-    setSelectedTemplate(templateId)
-  }
+    setSelectedTemplate(templateId);
+  };
 
   const handleContinue = () => {
     if (selectedTemplate) {
-      setStep("configure")
+      setStep("configure");
     }
-  }
+  };
 
   const handleCreateProject = () => {
     if (selectedTemplate) {
-      const templateMap: Record<string, "REACT" | "NEXTJS" | "EXPRESS"> = {
+      const templateMap: Record<
+        string,
+        "REACT" | "NEXTJS" | "EXPRESS" | "VUE" | "HONO" | "ANGULAR"
+      > = {
         react: "REACT",
         nextjs: "NEXTJS",
         express: "EXPRESS",
-      }
+        vue: "VUE",
+        hono: "HONO",
+        angular: "ANGULAR",
+      };
 
-      const template = templates.find((t) => t.id === selectedTemplate)
+      const template = templates.find((t) => t.id === selectedTemplate);
       onSubmit({
         title: projectName || `New ${template?.name} Project`,
         template: templateMap[selectedTemplate] || "REACT",
         description: template?.description,
-      })
+      });
 
-      console.log(`Creating ${projectName || "new project"} with template: ${template?.name}`)
-      onClose()
+      console.log(
+        `Creating ${projectName || "new project"} with template: ${
+          template?.name
+        }`
+      );
+      onClose();
       // Reset state for next time
-      setStep("select")
-      setSelectedTemplate(null)
-      setProjectName("")
+      setStep("select");
+      setSelectedTemplate(null);
+      setProjectName("");
     }
-  }
+  };
 
   const handleBack = () => {
-    setStep("select")
-  }
+    setStep("select");
+  };
 
   const renderStars = (count: number) => {
     return Array(5)
       .fill(0)
       .map((_, i) => (
-        <Star key={i} size={14} className={i < count ? "fill-yellow-400 text-yellow-400" : "text-gray-300"} />
-      ))
-  }
+        <Star
+          key={i}
+          size={14}
+          className={
+            i < count ? "fill-yellow-400 text-yellow-400" : "text-gray-300"
+          }
+        />
+      ));
+  };
 
   return (
     <Dialog
       open={isOpen}
       onOpenChange={(open) => {
         if (!open) {
-          onClose()
+          onClose();
           // Reset state when closing
-          setStep("select")
-          setSelectedTemplate(null)
-          setProjectName("")
+          setStep("select");
+          setSelectedTemplate(null);
+          setProjectName("");
         }
       }}
     >
@@ -188,7 +255,9 @@ const TemplateSelectionModal = ({ isOpen, onClose, onSubmit }: TemplateSelection
                 <Plus size={24} className="text-[#e93f3f]" />
                 Select a Template
               </DialogTitle>
-              <DialogDescription>Choose a template to create your new playground</DialogDescription>
+              <DialogDescription>
+                Choose a template to create your new playground
+              </DialogDescription>
             </DialogHeader>
 
             <div className="flex flex-col gap-6 py-4">
@@ -220,7 +289,10 @@ const TemplateSelectionModal = ({ isOpen, onClose, onSubmit }: TemplateSelection
                 </Tabs>
               </div>
 
-              <RadioGroup value={selectedTemplate || ""} onValueChange={handleSelectTemplate}>
+              <RadioGroup
+                value={selectedTemplate || ""}
+                onValueChange={handleSelectTemplate}
+              >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {filteredTemplates.length > 0 ? (
                     filteredTemplates.map((template) => (
@@ -235,7 +307,9 @@ const TemplateSelectionModal = ({ isOpen, onClose, onSubmit }: TemplateSelection
                           }`}
                         onClick={() => handleSelectTemplate(template.id)}
                       >
-                        <div className="absolute top-4 right-4 flex gap-1">{renderStars(template.popularity)}</div>
+                        <div className="absolute top-4 right-4 flex gap-1">
+                          {renderStars(template.popularity)}
+                        </div>
 
                         {selectedTemplate === template.id && (
                           <div className="absolute top-2 left-2 bg-[#E93F3F] text-white rounded-full p-1">
@@ -259,19 +333,38 @@ const TemplateSelectionModal = ({ isOpen, onClose, onSubmit }: TemplateSelection
 
                           <div className="flex flex-col">
                             <div className="flex items-center gap-2 mb-1">
-                              <h3 className="text-lg font-semibold">{template.name}</h3>
+                              <h3 className="text-lg font-semibold">
+                                {template.name}
+                              </h3>
                               <div className="flex gap-1">
-                                {template.category === "frontend" && <Code size={14} className="text-blue-500" />}
-                                {template.category === "backend" && <Server size={14} className="text-green-500" />}
-                                {template.category === "fullstack" && <Globe size={14} className="text-purple-500" />}
+                                {template.category === "frontend" && (
+                                  <Code size={14} className="text-blue-500" />
+                                )}
+                                {template.category === "backend" && (
+                                  <Server
+                                    size={14}
+                                    className="text-green-500"
+                                  />
+                                )}
+                                {template.category === "fullstack" && (
+                                  <Globe
+                                    size={14}
+                                    className="text-purple-500"
+                                  />
+                                )}
                               </div>
                             </div>
 
-                            <p className="text-sm text-muted-foreground mb-3">{template.description}</p>
+                            <p className="text-sm text-muted-foreground mb-3">
+                              {template.description}
+                            </p>
 
                             <div className="flex flex-wrap gap-2 mt-auto">
                               {template.tags.map((tag) => (
-                                <span key={tag} className="text-xs px-2 py-1 border rounded-2xl">
+                                <span
+                                  key={tag}
+                                  className="text-xs px-2 py-1 border rounded-2xl"
+                                >
                                   {tag}
                                 </span>
                               ))}
@@ -279,14 +372,22 @@ const TemplateSelectionModal = ({ isOpen, onClose, onSubmit }: TemplateSelection
                           </div>
                         </div>
 
-                        <RadioGroupItem value={template.id} id={template.id} className="sr-only" />
+                        <RadioGroupItem
+                          value={template.id}
+                          id={template.id}
+                          className="sr-only"
+                        />
                       </div>
                     ))
                   ) : (
                     <div className="col-span-2 flex flex-col items-center justify-center p-8 text-center">
                       <Search size={48} className="text-gray-300 mb-4" />
-                      <h3 className="text-lg font-medium">No templates found</h3>
-                      <p className="text-sm text-muted-foreground">Try adjusting your search or filters</p>
+                      <h3 className="text-lg font-medium">
+                        No templates found
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Try adjusting your search or filters
+                      </p>
                     </div>
                   )}
                 </div>
@@ -296,7 +397,10 @@ const TemplateSelectionModal = ({ isOpen, onClose, onSubmit }: TemplateSelection
             <div className="flex justify-between gap-3 mt-4 pt-4 border-t">
               <div className="flex items-center text-sm text-muted-foreground">
                 <Clock size={14} className="mr-1" />
-                <span>Estimated setup time: {selectedTemplate ? "2-5 minutes" : "Select a template"}</span>
+                <span>
+                  Estimated setup time:{" "}
+                  {selectedTemplate ? "2-5 minutes" : "Select a template"}
+                </span>
               </div>
               <div className="flex gap-3">
                 <Button variant="outline" onClick={onClose}>
@@ -315,9 +419,12 @@ const TemplateSelectionModal = ({ isOpen, onClose, onSubmit }: TemplateSelection
         ) : (
           <>
             <DialogHeader>
-              <DialogTitle className="text-2xl font-bold text-[#e93f3f]">Configure Your Project</DialogTitle>
+              <DialogTitle className="text-2xl font-bold text-[#e93f3f]">
+                Configure Your Project
+              </DialogTitle>
               <DialogDescription>
-                {templates.find((t) => t.id === selectedTemplate)?.name} project configuration
+                {templates.find((t) => t.id === selectedTemplate)?.name} project
+                configuration
               </DialogDescription>
             </DialogHeader>
 
@@ -351,7 +458,10 @@ const TemplateSelectionModal = ({ isOpen, onClose, onSubmit }: TemplateSelection
               <Button variant="outline" onClick={handleBack}>
                 Back
               </Button>
-              <Button className="bg-[#E93F3F] hover:bg-[#d03636]" onClick={handleCreateProject}>
+              <Button
+                className="bg-[#E93F3F] hover:bg-[#d03636]"
+                onClick={handleCreateProject}
+              >
                 Create Project
               </Button>
             </div>
@@ -359,7 +469,7 @@ const TemplateSelectionModal = ({ isOpen, onClose, onSubmit }: TemplateSelection
         )}
       </DialogContent>
     </Dialog>
-  )
-}
+  );
+};
 
-export default TemplateSelectionModal
+export default TemplateSelectionModal;

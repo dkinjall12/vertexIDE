@@ -8,7 +8,7 @@ import { revalidatePath } from "next/cache";
 
 export const createPlayground = async (data:{
     title: string;
-    template: "REACT" | "NEXTJS" | "EXPRESS";
+    template: "REACT" | "NEXTJS" | "EXPRESS" | "VUE" | "HONO" | "ANGULAR";
     description?: string;
   })=>{
     const {template , title , description} = data;
