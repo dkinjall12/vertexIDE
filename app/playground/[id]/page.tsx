@@ -229,8 +229,7 @@ const MainPlaygroundPage: React.FC = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
 
       if (e.ctrlKey && e.key === "s") {
-
-              e.preventDefault();
+        e.preventDefault();
         handleSave();
       }
     };
