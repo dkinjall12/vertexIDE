@@ -95,7 +95,7 @@ const analyzeCodeContext = (content: string, line: number, column: number): Anal
       currentScope = 'function';
       break;
     }
-    if (lineText.match(/^\s*\w+\s*\([^)]*\)\s*[{:]/) && isInClass) {
+    if (lineText.match(/^\s*\w+\s*$$[^)]*$$\s*[{:]/) && isInClass) {
       currentScope = 'method';
       isInFunction = true;
       break;
@@ -373,12 +373,13 @@ ${context.projectContext ? `<PROJECT_CONTEXT>
 8. Respect the current scope and available variables/functions
 
 <OUTPUT_FORMAT>
-Return only the valid code that should be inserted at the cursor position. 
-- No explanations or markdown formatting
-- No repetition of existing code
-- Maintain proper indentation and formatting
-- Follow the detected code style preferences
-- Ensure the suggestion is syntactically correct and contextually appropriate
+Return ONLY the valid code that should be inserted at the cursor position.
+- Do NOT include any language names, framework names, or descriptive text outside of valid code.
+- No explanations or markdown formatting (e.g., \`\`\`javascript).
+- No repetition of existing code, especially on the same line or immediately preceding lines.
+- Maintain proper indentation and formatting consistent with the surrounding code.
+- Follow the detected code style preferences.
+- Ensure the suggestion is syntactically correct and contextually appropriate.
 </OUTPUT_FORMAT>
 
 Generate a high-quality ${context.type} suggestion:`;
@@ -547,7 +548,7 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await response.json();
-    let suggestion = data.response.split('```')[1]?.trim();
+    let suggestion = data.response.split('\`\`\`')[1]?.trim();
 
     // Fix: Only extract code between |CURSOR| markers if present
     if (suggestion && suggestion.includes('|CURSOR|')) {
