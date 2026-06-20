@@ -1,9 +1,10 @@
 import type { Monaco } from "@monaco-editor/react"
+import type { editor as MonacoEditor, IDisposable } from "monaco-editor"
 
 interface SuggestionCallbacks {
-  onAccept: (editor: any, monaco: any) => void
-  onReject: (editor: any) => void
-  onTrigger: (type: string, editor: any) => void
+  onAccept: (editor: MonacoEditor.IStandaloneCodeEditor, monaco: Monaco) => void
+  onReject: (editor: MonacoEditor.IStandaloneCodeEditor) => void
+  onTrigger: (type: string, editor: MonacoEditor.IStandaloneCodeEditor) => void
 }
 
 interface ActiveSuggestion {
@@ -13,14 +14,14 @@ interface ActiveSuggestion {
 }
 
 export class SuggestionManager {
-  private editor: any
+  private editor: MonacoEditor.IStandaloneCodeEditor
   private monaco: Monaco
   private callbacks: SuggestionCallbacks
   private activeSuggestion: ActiveSuggestion | null = null
-  private inlineProvider: any = null
+  private inlineProvider: IDisposable | null = null
   private isAccepting = false
 
-  constructor(editor: any, monaco: Monaco, callbacks: SuggestionCallbacks) {
+  constructor(editor: MonacoEditor.IStandaloneCodeEditor, monaco: Monaco, callbacks: SuggestionCallbacks) {
     this.editor = editor
     this.monaco = monaco
     this.callbacks = callbacks
@@ -90,6 +91,11 @@ export class SuggestionManager {
         suggestionPosition: suggestion.position,
         currentPosition: currentPosition,
       })
+
+      if (!currentPosition) {
+        console.error("Current editor position is null")
+        return false
+      }
 
       // Create range from suggestion position to current position
       const range = new this.monaco.Range(
@@ -244,6 +250,7 @@ export class SuggestionManager {
           ],
         }
       },
+      freeInlineCompletions: () => {},
     })
   }
 
