@@ -22,10 +22,11 @@ Keep responses concise but comprehensive. Use code blocks with language specific
     ...messages
   ];
 
+  // Compose prompt for the model
   const prompt = fullMessages.map((msg) => `${msg.role}: ${msg.content}`).join("\n\n");
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout for better responses
+  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
 
   try {
     const response = await fetch("http://localhost:11434/api/generate", {
@@ -40,7 +41,7 @@ Keep responses concise but comprehensive. Use code blocks with language specific
         options: {
           temperature: 0.7,
           top_p: 0.9,
-          max_tokens: 1000, // Increased for more detailed responses
+          max_tokens: 1000,
           num_predict: 1000,
           repeat_penalty: 1.1,
           context_length: 4096,
@@ -58,13 +59,12 @@ Keep responses concise but comprehensive. Use code blocks with language specific
     }
 
     const data = await response.json();
-    
     if (!data.response) {
       throw new Error("No response from AI model");
     }
-
     return data.response.trim();
   } catch (error) {
+    clearTimeout(timeoutId);
     if ((error as Error).name === "AbortError") {
       throw new Error("Request timeout: AI model took too long to respond");
     }
@@ -78,33 +78,35 @@ export async function POST(req: NextRequest) {
     const { message, history } = await req.json();
 
     if (!message || typeof message !== "string") {
-      return new Response(JSON.stringify({ error: "Message is required and must be a string" }), { 
+      return new Response(JSON.stringify({ error: "Message is required and must be a string" }), {
         status: 400,
         headers: { "Content-Type": "application/json" }
       });
     }
 
     // Validate history format
-    const validHistory = Array.isArray(history) ? history.filter(
-      (msg: any) => 
-        msg && 
-        typeof msg === "object" && 
-        typeof msg.role === "string" && 
-        typeof msg.content === "string" &&
-        ["user", "assistant"].includes(msg.role)
-    ) : [];
+    const validHistory = Array.isArray(history)
+      ? history.filter(
+          (msg: any) =>
+            msg &&
+            typeof msg === "object" &&
+            typeof msg.role === "string" &&
+            typeof msg.content === "string" &&
+            ["user", "assistant"].includes(msg.role)
+        )
+      : [];
 
-    // Limit history to last 10 messages to prevent context overflow
+    // Limit history to last 10 messages
     const recentHistory = validHistory.slice(-10);
 
     // Construct messages array
     const messages: ChatMessage[] = [
       ...recentHistory,
-      { role: "user", content: message }
+      { role: "user", content: message },
     ];
 
     console.log(`Generating AI response for message: "${message.substring(0, 50)}..."`);
-    
+
     const aiResponse = await generateAIResponse(messages);
 
     if (!aiResponse) {
@@ -113,35 +115,41 @@ export async function POST(req: NextRequest) {
 
     console.log(`AI response generated successfully (${aiResponse.length} characters)`);
 
-    return new Response(JSON.stringify({ 
-      response: aiResponse,
-      timestamp: new Date().toISOString()
-    }), {
-      headers: { "Content-Type": "application/json" }
-    });
-
+    return new Response(
+      JSON.stringify({
+        response: aiResponse,
+        timestamp: new Date().toISOString(),
+      }),
+      {
+        headers: { "Content-Type": "application/json" },
+      }
+    );
   } catch (error) {
     console.error("Error in AI chat route:", error);
-    
     const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-    
-    return new Response(JSON.stringify({ 
-      error: "Failed to generate AI response", 
-      details: errorMessage,
-      timestamp: new Date().toISOString()
-    }), { 
-      status: 500,
-      headers: { "Content-Type": "application/json" }
-    });
+    return new Response(
+      JSON.stringify({
+        error: "Failed to generate AI response",
+        details: errorMessage,
+        timestamp: new Date().toISOString(),
+      }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
   }
 }
 
 export async function GET() {
-  return new Response(JSON.stringify({ 
-    status: "AI Chat API is running",
-    timestamp: new Date().toISOString(),
-    info: "Use POST method to send chat messages"
-  }), {
-    headers: { "Content-Type": "application/json" }
-  });
+  return new Response(
+    JSON.stringify({
+      status: "AI Chat API is running",
+      timestamp: new Date().toISOString(),
+      info: "Use POST method to send chat messages",
+    }),
+    {
+      headers: { "Content-Type": "application/json" },
+    }
+  );
 }
