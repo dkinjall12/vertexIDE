@@ -113,6 +113,8 @@ const MainPlaygroundPage: React.FC = () => {
   // Initialize zustand templateData from usePlayground only on first load
   React.useEffect(() => {
     if (templateData && !openFiles.length) {
+
+      
       setTemplateData(templateData);
     }
   }, [templateData, setTemplateData, openFiles.length]);
