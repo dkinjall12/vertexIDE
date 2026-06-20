@@ -99,19 +99,64 @@ const MainPlaygroundPage: React.FC = () => {
     error: containerError,
     instance,
     writeFileSync,
-    // @ts-ignore
   } = useWebContainer({ templateData });
+  
   const lastSyncedContent = useRef<Map<string, string>>(new Map());
-  // Set template data when playground loads
-  React.useEffect(() => {
-    if (templateData) {
-      setTemplateData(templateData);
-    }
-  }, [templateData, setTemplateData]);
 
+  // Set template data when playground loads
   React.useEffect(() => {
     setPlaygroundId(id);
   }, [id, setPlaygroundId]);
+
+  // Initialize zustand templateData from usePlayground only on first load
+  React.useEffect(() => {
+    if (templateData && !openFiles.length) {
+      setTemplateData(templateData);
+    }
+  }, [templateData, setTemplateData, openFiles.length]);
+
+  // Create wrapper functions that pass saveTemplateData
+  const wrappedHandleAddFile = useCallback(
+    (newFile: TemplateFile, parentPath: string) => {
+      return handleAddFile(newFile, parentPath, writeFileSync!, instance, saveTemplateData);
+    },
+    [handleAddFile, writeFileSync, instance, saveTemplateData]
+  );
+
+  const wrappedHandleAddFolder = useCallback(
+    (newFolder: TemplateFolder, parentPath: string) => {
+      return handleAddFolder(newFolder, parentPath, instance, saveTemplateData);
+    },
+    [handleAddFolder, instance, saveTemplateData]
+  );
+
+  const wrappedHandleDeleteFile = useCallback(
+    (file: TemplateFile, parentPath: string) => {
+      return handleDeleteFile(file, parentPath, saveTemplateData);
+    },
+    [handleDeleteFile, saveTemplateData]
+  );
+
+  const wrappedHandleDeleteFolder = useCallback(
+    (folder: TemplateFolder, parentPath: string) => {
+      return handleDeleteFolder(folder, parentPath, saveTemplateData);
+    },
+    [handleDeleteFolder, saveTemplateData]
+  );
+
+  const wrappedHandleRenameFile = useCallback(
+    (file: TemplateFile, newFilename: string, newExtension: string, parentPath: string) => {
+      return handleRenameFile(file, newFilename, newExtension, parentPath, saveTemplateData);
+    },
+    [handleRenameFile, saveTemplateData]
+  );
+
+  const wrappedHandleRenameFolder = useCallback(
+    (folder: TemplateFolder, newFolderName: string, parentPath: string) => {
+      return handleRenameFolder(folder, newFolderName, parentPath, saveTemplateData);
+    },
+    [handleRenameFolder, saveTemplateData]
+  );
 
   const activeFile = openFiles.find((file) => file.id === activeFileId);
   const hasUnsavedChanges = openFiles.some((file) => file.hasUnsavedChanges);
@@ -120,70 +165,55 @@ const MainPlaygroundPage: React.FC = () => {
     openFile(file);
   };
 
-  const handleSave = async (fileId?: string) => {
+  const handleSave = useCallback(async (fileId?: string) => {
     const targetFileId = fileId || activeFileId;
-
-    if (!targetFileId || !templateData) return;
+    if (!targetFileId) return;
 
     const fileToSave = openFiles.find((f) => f.id === targetFileId);
     if (!fileToSave) return;
 
-    try {
-      // Clone template data
-      const updatedTemplateData = JSON.parse(
-        JSON.stringify(templateData)
-      ) as TemplateFolder;
+    const latestTemplateData = useFileExplorer.getState().templateData;
+    if (!latestTemplateData) return;
 
-      // Find the file's path in the template structure
-      const filePath = findFilePath(fileToSave, updatedTemplateData);
+    try {
+      const filePath = findFilePath(fileToSave, latestTemplateData);
       if (!filePath) {
-        throw new Error(
+        toast.error(
           `Could not find path for file: ${fileToSave.filename}.${fileToSave.fileExtension}`
         );
+        return;
       }
 
-      // Update the file content in template data
-      const updateFileContent = (
-        items: (TemplateFile | TemplateFolder)[]
-      ): (TemplateFile | TemplateFolder)[] => {
-        return items.map((item) => {
+      // Update file content in template data (clone for immutability)
+      const updatedTemplateData = JSON.parse(
+        JSON.stringify(latestTemplateData)
+      );
+      const updateFileContent = (items: any[]) =>
+        items.map((item) => {
           if ("folderName" in item) {
-            return {
-              ...item,
-              items: updateFileContent(item.items),
-            };
+            return { ...item, items: updateFileContent(item.items) };
           } else if (
             item.filename === fileToSave.filename &&
             item.fileExtension === fileToSave.fileExtension
           ) {
-            return {
-              ...item,
-              content: fileToSave.content,
-            };
+            return { ...item, content: fileToSave.content };
           }
           return item;
         });
-      };
-
-      // Update template data with new content
       updatedTemplateData.items = updateFileContent(updatedTemplateData.items);
 
       // Sync with WebContainer
       if (writeFileSync) {
         await writeFileSync(filePath, fileToSave.content);
         lastSyncedContent.current.set(fileToSave.id, fileToSave.content);
-
-        // Reflect changes in WebContainer without restarting
         if (instance && instance.fs) {
           await instance.fs.writeFile(filePath, fileToSave.content);
         }
       }
 
-      // Save to backend (this should update both file content and structure)
-      await SaveUpdatedCode(id, updatedTemplateData);
-
-      // Update template data in state
-      setTemplateData(updatedTemplateData);
+      // Use saveTemplateData to persist changes
+      const newTemplateData = await saveTemplateData(updatedTemplateData);
+      setTemplateData(newTemplateData || updatedTemplateData);
 
       // Update open files
       const updatedOpenFiles = openFiles.map((f) =>
@@ -204,9 +234,9 @@ const MainPlaygroundPage: React.FC = () => {
       toast.error(
         `Failed to save ${fileToSave.filename}.${fileToSave.fileExtension}`
       );
-      throw error; // Re-throw to handle in save all
+      throw error;
     }
-  };
+  }, [activeFileId, openFiles, writeFileSync, instance, saveTemplateData, setTemplateData, setOpenFiles]);
 
   const handleSaveAll = async () => {
     const unsavedFiles = openFiles.filter((f) => f.hasUnsavedChanges);
@@ -224,10 +254,9 @@ const MainPlaygroundPage: React.FC = () => {
     }
   };
 
-// Add event to save file by click ctrl + s
+  // Add event to save file by click ctrl + s
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-
       if (e.ctrlKey && e.key === "s") {
         e.preventDefault();
         handleSave();
@@ -237,8 +266,6 @@ const MainPlaygroundPage: React.FC = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleSave]);
 
-
-  // Run project function
   // Error state
   if (error) {
     return (
@@ -304,12 +331,12 @@ const MainPlaygroundPage: React.FC = () => {
           onFileSelect={handleFileSelect}
           selectedFile={activeFile}
           title="File Explorer"
-          onAddFile={handleAddFile}
-          onAddFolder={handleAddFolder}
-          onDeleteFile={handleDeleteFile}
-          onDeleteFolder={handleDeleteFolder}
-          onRenameFile={handleRenameFile}
-          onRenameFolder={handleRenameFolder}
+          onAddFile={wrappedHandleAddFile}
+          onAddFolder={wrappedHandleAddFolder}
+          onDeleteFile={wrappedHandleDeleteFile}
+          onDeleteFolder={wrappedHandleDeleteFolder}
+          onRenameFile={wrappedHandleRenameFile}
+          onRenameFolder={wrappedHandleRenameFolder}
         />
 
         <SidebarInset>
@@ -360,7 +387,6 @@ const MainPlaygroundPage: React.FC = () => {
                 <ToggleAI
                   isEnabled={aiSuggestions.isEnabled}
                   onToggle={aiSuggestions.toggleEnabled}
-                 
                   suggestionLoading={aiSuggestions.isLoading}
                 />
 
