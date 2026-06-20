@@ -38,13 +38,14 @@ import Link from "next/link"
 import { useState } from "react"
 import { MoreHorizontal, Edit3, Trash2, ExternalLink, Copy, Download, Eye } from "lucide-react"
 import { toast } from "sonner"
-import { deleteProjectById } from "@/features/playground/actions"
+import { MarkedToggleButton } from "./toggle-star"
 
 interface ProjectTableProps {
   projects: Project[]
   onUpdateProject?: (id: string, data: { title: string; description: string }) => Promise<void>
   onDeleteProject?: (id: string) => Promise<void>
   onDuplicateProject?: (id: string) => Promise<void>
+  onMarkasFavorite?: (id: string) => Promise<void>
 }
 
 interface EditProjectData {
@@ -57,13 +58,14 @@ export default function ProjectTable({
   onUpdateProject,
   onDeleteProject,
   onDuplicateProject,
+  onMarkasFavorite,
 }: ProjectTableProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [editData, setEditData] = useState<EditProjectData>({ title: "", description: "" })
   const [isLoading, setIsLoading] = useState(false)
-
+  const [favoutrie, setFavourite] = useState(false)
   const handleEditClick = (project: Project) => {
     setSelectedProject(project)
     setEditData({
@@ -73,9 +75,9 @@ export default function ProjectTable({
     setEditDialogOpen(true)
   }
 
-  const handleDeleteClick = async(project: Project) => {
+  const handleDeleteClick = async (project: Project) => {
     setSelectedProject(project)
-   
+
     setDeleteDialogOpen(true)
   }
 
@@ -91,6 +93,21 @@ export default function ProjectTable({
     } catch (error) {
       toast.error("Failed to update project")
       console.error("Error updating project:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleMarkasFavorite = async (project: Project) => {
+    if (!onMarkasFavorite) return
+
+    setIsLoading(true)
+    try {
+      await onMarkasFavorite(project.id)
+      toast.success("Project marked as favorite successfully")
+    } catch (error) {
+      toast.error("Failed to mark project as favorite")
+      console.error("Error marking project as favorite:", error)
     } finally {
       setIsLoading(false)
     }
@@ -187,6 +204,9 @@ export default function ProjectTable({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuItem asChild>
+                        <MarkedToggleButton markedForRevision={project.Starmark[0]?.isMarked} id={project.id} />
+                      </DropdownMenuItem>
                       <DropdownMenuItem asChild>
                         <Link href={`/playground/${project.id}`} className="flex items-center">
                           <Eye className="h-4 w-4 mr-2" />
