@@ -1,8 +1,3 @@
-Here's your **final `README.md` file** for the **Vibecode Editor** project, fully polished with your current setup:
-
----
-
-````md
 # 🧠 Vibecode Editor – AI-Powered Web IDE
 
 ![Vibecode Editor Thumbnail](public/vibe-code-editor-thumbnail.svg)
