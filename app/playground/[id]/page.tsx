@@ -18,14 +18,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,6 +48,7 @@ import { useWebContainer } from "@/features/webcontainers/hooks/useWebContainer"
 import { SaveUpdatedCode } from "@/features/playground/actions";
 import { TemplateFolder } from "@/features/playground/types";
 import { findFilePath } from "@/features/playground/libs";
+import { ConfirmationDialog } from "@/features/playground/components/dialogs/conformation-dialog";
 
 const MainPlaygroundPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -567,28 +561,14 @@ const MainPlaygroundPage: React.FC = () => {
           </div>
         </SidebarInset>
 
-        {/* Confirmation Dialog */}
-        <Dialog
-          open={confirmationDialog.isOpen}
-          onOpenChange={(open) =>
-            setConfirmationDialog((prev) => ({ ...prev, isOpen: open }))
-          }
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{confirmationDialog.title}</DialogTitle>
-              <DialogDescription>
-                {confirmationDialog.description}
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={confirmationDialog.onCancel}>
-                Don't Save
-              </Button>
-              <Button onClick={confirmationDialog.onConfirm}>Save</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+      <ConfirmationDialog
+      isOpen={confirmationDialog.isOpen}
+      title={confirmationDialog.title}
+      description={confirmationDialog.description}
+      onConfirm={confirmationDialog.onConfirm}
+      onCancel={confirmationDialog.onCancel}
+      setIsOpen={(open) => setConfirmationDialog((prev) => ({ ...prev, isOpen: open }))}
+      />
       </>
     </TooltipProvider>
   );

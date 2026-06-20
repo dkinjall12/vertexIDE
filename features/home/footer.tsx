@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Github as LucideGithub}  from "lucide-react";
+import { Github as LucideGithub } from "lucide-react";
 import Image from "next/image";
 
 interface ProjectLink {
@@ -15,9 +15,10 @@ export function Footer() {
   const socialLinks = [
     {
       href: "#",
-      icon: <LucideGithub className="w-5 h-5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors" />,
+      icon: (
+        <LucideGithub className="w-5 h-5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors" />
+      ),
     },
-   
   ];
 
   return (
@@ -26,7 +27,12 @@ export function Footer() {
         {/* Social Links */}
         <div className="flex gap-4">
           {socialLinks.map((link, index) => (
-            <Link key={index} href={link.href || "#"} target="_blank" rel="noopener noreferrer">
+            <Link
+              key={index}
+              href={link.href || "#"}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               {link.icon}
             </Link>
           ))}
