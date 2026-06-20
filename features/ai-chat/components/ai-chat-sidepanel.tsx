@@ -56,7 +56,7 @@ interface FileAttachment {
   content: string
   language: string
   size: number
-  type: "code" | "text" | "image" | "video" | "audio" | "archive"
+  type: "code"
   preview?: string
   mimeType?: string
 }
@@ -358,44 +358,18 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
   }
 
   const detectFileType = (fileName: string, content: string): FileAttachment["type"] => {
+    // Only allow code files
     const ext = fileName.split(".").pop()?.toLowerCase()
-
-    if (["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "ico"].includes(ext || "")) return "image"
-    if (["mp4", "avi", "mov", "wmv", "flv", "webm", "mkv"].includes(ext || "")) return "video"
-    if (["mp3", "wav", "flac", "aac", "ogg", "wma"].includes(ext || "")) return "audio"
-    if (["zip", "rar", "7z", "tar", "gz", "bz2", "xz"].includes(ext || "")) return "archive"
-    if (
-      [
-        "js",
-        "jsx",
-        "ts",
-        "tsx",
-        "py",
-        "java",
-        "cpp",
-        "c",
-        "html",
-        "css",
-        "scss",
-        "json",
-        "xml",
-        "yaml",
-        "sql",
-        "sh",
-        "php",
-        "rb",
-        "go",
-        "rs",
-      ].includes(ext || "")
-    )
-      return "code"
-
-    return "text"
+    if ([
+      "js", "jsx", "ts", "tsx", "py", "java", "cpp", "c", "html", "css", "scss", "json", "xml", "yaml", "sql", "sh", "php", "rb", "go", "rs"
+    ].includes(ext || "")) return "code"
+    return "code" // fallback: treat everything as code
   }
 
   const addFileAttachment = (fileName: string, content: string, mimeType?: string) => {
     const language = detectLanguage(fileName, content)
     const type = detectFileType(fileName, content)
+    if (type !== "code") return // Only allow code files
     const newFile: FileAttachment = {
       id: Date.now().toString(),
       name: fileName,
@@ -974,10 +948,10 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
                           remarkPlugins={[remarkGfm, remarkMath]}
                           rehypePlugins={[rehypeKatex]}
                           components={{
-                            code: ({ children, className, inline }) => (
+                            code: ({ children, className, inline: _inline }) => (
                               <EnhancedCodeBlock
                                 className={className}
-                                inline={inline}
+                                inline={_inline as boolean}
                                 onInsert={onInsertCode ? (code) => handleInsertCode(code) : undefined}
                                 onRun={onRunCode}
                                 theme={theme}
@@ -1087,39 +1061,39 @@ export const AIChatSidePanel: React.FC<AIChatSidePanelProps> = ({
               <div ref={messagesEndRef} className="h-1" />
             </div>
           </div>
-
-          {/* Enhanced File Attachments Preview */}
-          {attachments.length > 0 && (
-            <div className="shrink-0 border-t border-zinc-800 bg-zinc-900/50 p-4">
-              <div className="text-sm font-medium text-zinc-300 mb-3 flex items-center justify-between">
-                <span>Attached Files ({attachments.length})</span>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-xs">
-                    {attachments.reduce((acc, file) => acc + file.size, 0)} chars total
-                  </Badge>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setAttachments([])}
-                    className="h-6 px-2 text-xs text-zinc-400 hover:text-zinc-200"
-                  >
-                    <Minus className="h-3 w-3 mr-1" />
-                    Clear All
-                  </Button>
-                </div>
-              </div>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {attachments.map((file) => (
-                  <EnhancedFilePreview
-                    key={file.id}
-                    file={file}
-                    onRemove={() => removeAttachment(file.id)}
-                    compact={true}
-                    onInsert={onInsertCode ? (code) => handleInsertCode(code) : undefined}
-                  />
-                ))}
-              </div>
-            </div>
+  {/* Enhanced File Attachments Preview */}
+  {attachments.length > 0 && (
+    <div className="shrink-0 border-t border-zinc-800 bg-zinc-900/50 p-4">
+      <div className="text-sm font-medium text-zinc-300 mb-3 flex items-center justify-between">
+        <span>Attached Code Files ({attachments.length})</span>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-xs">
+            {attachments.reduce((acc, file) => acc + file.size, 0)} chars total
+          </Badge>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setAttachments([])}
+            className="h-6 px-2 text-xs text-zinc-400 hover:text-zinc-200"
+          >
+            <Minus className="h-3 w-3 mr-1" />
+            Clear All
+          </Button>
+        </div>
+      </div>
+      <div className="space-y-2 max-h-48 overflow-y-auto">
+        {attachments.map((file) => (
+          <EnhancedFilePreview
+            key={file.id}
+            file={{ ...file, type: "code" }}
+            onRemove={() => removeAttachment(file.id)}
+            compact={true}
+            onInsert={onInsertCode ? (code) => handleInsertCode(code) : undefined}
+          />
+        ))}
+      </div>
+    </div>
+  )}
           )}
 
           {/* Enhanced Input Form */}

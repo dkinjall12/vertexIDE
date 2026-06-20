@@ -1,12 +1,20 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server"
 
 interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
+  role: "user" | "assistant"
+  content: string
+}
+
+interface EnhancePromptRequest {
+  prompt: string
+  context?: {
+    fileName?: string
+    language?: string
+    codeContent?: string
+  }
 }
 
 async function generateAIResponse(messages: ChatMessage[]) {
-  // Create a more structured prompt for better code assistance
   const systemPrompt = `You are an expert AI coding assistant. You help developers with:
 - Code explanations and debugging
 - Best practices and architecture advice
@@ -15,18 +23,14 @@ async function generateAIResponse(messages: ChatMessage[]) {
 - Code reviews and optimizations
 
 Always provide clear, practical answers. When showing code, use proper formatting with language-specific syntax.
-Keep responses concise but comprehensive. Use code blocks with language specification when providing code examples.`;
+Keep responses concise but comprehensive. Use code blocks with language specification when providing code examples.`
 
-  const fullMessages = [
-    { role: "system", content: systemPrompt },
-    ...messages
-  ];
+  const fullMessages = [{ role: "system", content: systemPrompt }, ...messages]
 
-  // Compose prompt for the model
-  const prompt = fullMessages.map((msg) => `${msg.role}: ${msg.content}`).join("\n\n");
+  const prompt = fullMessages.map((msg) => `${msg.role}: ${msg.content}`).join("\n\n")
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 15000)
 
   try {
     const response = await fetch("http://localhost:11434/api/generate", {
@@ -48,43 +52,93 @@ Keep responses concise but comprehensive. Use code blocks with language specific
         },
       }),
       signal: controller.signal,
-    });
+    })
 
-    clearTimeout(timeoutId);
+    clearTimeout(timeoutId)
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Error from AI model API:", errorText);
-      throw new Error(`AI model API error: ${response.status} - ${errorText}`);
+      const errorText = await response.text()
+      console.error("Error from AI model API:", errorText)
+      throw new Error(`AI model API error: ${response.status} - ${errorText}`)
     }
 
-    const data = await response.json();
+    const data = await response.json()
     if (!data.response) {
-      throw new Error("No response from AI model");
+      throw new Error("No response from AI model")
     }
-    return data.response.trim();
+    return data.response.trim()
   } catch (error) {
-    clearTimeout(timeoutId);
+    clearTimeout(timeoutId)
     if ((error as Error).name === "AbortError") {
-      throw new Error("Request timeout: AI model took too long to respond");
+      throw new Error("Request timeout: AI model took too long to respond")
     }
-    console.error("AI generation error:", error);
-    throw error;
+    console.error("AI generation error:", error)
+    throw error
+  }
+}
+
+async function enhancePrompt(request: EnhancePromptRequest) {
+  const enhancementPrompt = `You are a prompt enhancement assistant. Take the user's basic prompt and enhance it to be more specific, detailed, and effective for a coding AI assistant.
+
+Original prompt: "${request.prompt}"
+
+Context: ${request.context ? JSON.stringify(request.context, null, 2) : "No additional context"}
+
+Enhanced prompt should:
+- Be more specific and detailed
+- Include relevant technical context
+- Ask for specific examples or explanations
+- Be clear about expected output format
+- Maintain the original intent
+
+Return only the enhanced prompt, nothing else.`
+
+  try {
+    const response = await fetch("http://localhost:11434/api/generate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "codellama:latest",
+        prompt: enhancementPrompt,
+        stream: false,
+        options: {
+          temperature: 0.3,
+          max_tokens: 500,
+        },
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error("Failed to enhance prompt")
+    }
+
+    const data = await response.json()
+    return data.response?.trim() || request.prompt
+  } catch (error) {
+    console.error("Prompt enhancement error:", error)
+    return request.prompt // Return original if enhancement fails
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const { message, history } = await req.json();
+    const body = await req.json()
 
-    if (!message || typeof message !== "string") {
-      return new Response(JSON.stringify({ error: "Message is required and must be a string" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" }
-      });
+    // Handle prompt enhancement
+    if (body.action === "enhance") {
+      const enhancedPrompt = await enhancePrompt(body as EnhancePromptRequest)
+      return NextResponse.json({ enhancedPrompt })
     }
 
-    // Validate history format
+    // Handle regular chat
+    const { message, history } = body
+
+    if (!message || typeof message !== "string") {
+      return NextResponse.json({ error: "Message is required and must be a string" }, { status: 400 })
+    }
+
     const validHistory = Array.isArray(history)
       ? history.filter(
           (msg: any) =>
@@ -92,64 +146,41 @@ export async function POST(req: NextRequest) {
             typeof msg === "object" &&
             typeof msg.role === "string" &&
             typeof msg.content === "string" &&
-            ["user", "assistant"].includes(msg.role)
+            ["user", "assistant"].includes(msg.role),
         )
-      : [];
+      : []
 
-    // Limit history to last 10 messages
-    const recentHistory = validHistory.slice(-10);
+    const recentHistory = validHistory.slice(-10)
+    const messages: ChatMessage[] = [...recentHistory, { role: "user", content: message }]
 
-    // Construct messages array
-    const messages: ChatMessage[] = [
-      ...recentHistory,
-      { role: "user", content: message },
-    ];
-
-    console.log(`Generating AI response for message: "${message.substring(0, 50)}..."`);
-
-    const aiResponse = await generateAIResponse(messages);
+    const aiResponse = await generateAIResponse(messages)
 
     if (!aiResponse) {
-      throw new Error("Empty response from AI model");
+      throw new Error("Empty response from AI model")
     }
 
-    console.log(`AI response generated successfully (${aiResponse.length} characters)`);
-
-    return new Response(
-      JSON.stringify({
-        response: aiResponse,
-        timestamp: new Date().toISOString(),
-      }),
-      {
-        headers: { "Content-Type": "application/json" },
-      }
-    );
+    return NextResponse.json({
+      response: aiResponse,
+      timestamp: new Date().toISOString(),
+    })
   } catch (error) {
-    console.error("Error in AI chat route:", error);
-    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-    return new Response(
-      JSON.stringify({
+    console.error("Error in AI chat route:", error)
+    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred"
+    return NextResponse.json(
+      {
         error: "Failed to generate AI response",
         details: errorMessage,
         timestamp: new Date().toISOString(),
-      }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      }
-    );
+      },
+      { status: 500 },
+    )
   }
 }
 
 export async function GET() {
-  return new Response(
-    JSON.stringify({
-      status: "AI Chat API is running",
-      timestamp: new Date().toISOString(),
-      info: "Use POST method to send chat messages",
-    }),
-    {
-      headers: { "Content-Type": "application/json" },
-    }
-  );
+  return NextResponse.json({
+    status: "AI Chat API is running",
+    timestamp: new Date().toISOString(),
+    info: "Use POST method to send chat messages or enhance prompts",
+  })
 }
