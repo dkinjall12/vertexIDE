@@ -1,4 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { InferenceClient } from "@huggingface/inference";
+
+const client = new InferenceClient(process.env.HF_TOKEN!);
 
 interface CodeSuggestionRequest {
   fileContent: string
@@ -129,41 +132,44 @@ Generate suggestion:`
  */
 async function generateSuggestion(prompt: string): Promise<string> {
   try {
-    // Replace this with your actual AI service call
-    const response = await fetch("http://localhost:11434/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "codellama:latest",
-        prompt,
-        stream: false,
-        options: {
-          temperature: 0.7,
-          max_tokens: 300,
+    const completion = await client.chatCompletion({
+      provider: "groq",
+      model: "openai/gpt-oss-20b",
+
+      messages: [
+        {
+          role: "system",
+          content: `You are an expert code completion assistant.
+
+Return ONLY the code that should be inserted.
+Do not explain anything.
+Do not wrap your answer in markdown.
+Preserve indentation.
+Keep the completion concise.`,
         },
-      }),
-    })
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
 
-    if (!response.ok) {
-      throw new Error(`AI service error: ${response.statusText}`)
-    }
+      temperature: 0.3,
+      max_tokens: 300,
+    });
 
-    const data = await response.json()
-    let suggestion = data.response
+    let suggestion =
+      completion.choices[0].message.content?.trim() ??
+      "// AI suggestion unavailable";
 
-    // Clean up the suggestion
-    if (suggestion.includes("```")) {
-      const codeMatch = suggestion.match(/```[\w]*\n?([\s\S]*?)```/)
-      suggestion = codeMatch ? codeMatch[1].trim() : suggestion
-    }
+    // Remove markdown if the model still returns it
+    suggestion = suggestion.replace(/```[\w]*\n?/g, "");
+    suggestion = suggestion.replace(/```/g, "");
+    suggestion = suggestion.replace(/\|CURSOR\|/g, "").trim();
 
-    // Remove cursor markers if present
-    suggestion = suggestion.replace(/\|CURSOR\|/g, "").trim()
-
-    return suggestion
+    return suggestion;
   } catch (error) {
-    console.error("AI generation error:", error)
-    return "// AI suggestion unavailable"
+    console.error("AI generation error:", error);
+    return "// AI suggestion unavailable";
   }
 }
 

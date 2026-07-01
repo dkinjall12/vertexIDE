@@ -11,6 +11,7 @@
   "dependencies": {
     "@auth/prisma-adapter": "^2.9.0",
     "@hookform/resolvers": "^5.0.1",
+    "@huggingface/inference": "^4.13.21",
     "@monaco-editor/react": "^4.7.0",
     "@prisma/client": "^6.19.3",
     "@radix-ui/react-accordion": "^1.2.8",
