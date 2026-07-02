@@ -1,13 +1,13 @@
 import NextAuth from "next-auth";
-
-import {
-  DEFAULT_LOGIN_REDIRECT,
-  apiAuthPrefix,
-  publicRoutes,
-  authRoutes,
-} from "@/routes";
 import authConfig from "./auth.config";
 
+// Route constants are inlined here (rather than imported from "@/routes") so the
+// Edge middleware bundle has no external module references, which Vercel's Edge
+// Runtime bundler flags as "unsupported modules".
+const DEFAULT_LOGIN_REDIRECT = "/";
+const apiAuthPrefix = "/api/auth";
+const publicRoutes: string[] = ["/"];
+const authRoutes: string[] = ["/auth/sign-in"];
 
 const { auth } = NextAuth(authConfig);
 
