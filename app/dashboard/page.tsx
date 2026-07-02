@@ -9,6 +9,8 @@ import {
   duplicateProjectById,
 } from "@/features/playground/actions";
 
+export const dynamic = "force-dynamic";
+
 const EmptyState = () => (
   <div className="flex flex-col items-center justify-center py-16">
     <Image src="/empty-state.svg" alt="No projects" width={192} height={192} className="mb-4" />
