@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { InferenceClient } from "@huggingface/inference";
+import { auth } from "@/auth";
 
 const client = new InferenceClient(process.env.HF_TOKEN!);
 
@@ -95,13 +96,17 @@ Requirements:
 }
 
 export async function POST(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await req.json();
 
     // Prompt Enhancement
     if (body.action === "enhance") {
       const enhancedPrompt = await enhancePrompt(body);
-      console.log(process.env.HF_TOKEN);
       return NextResponse.json({
         enhancedPrompt,
       });
@@ -123,7 +128,7 @@ export async function POST(req: NextRequest) {
 
     const validHistory = Array.isArray(history)
       ? history.filter(
-          (msg: any) =>
+          (msg: Record<string, unknown>) =>
             msg &&
             typeof msg === "object" &&
             typeof msg.role === "string" &&

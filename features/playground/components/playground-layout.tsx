@@ -1,22 +1,25 @@
 "use client"
 
-import { usePlayground } from "../context/playground-context"
 import { AlertCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import LoadingStep from "@/components/ui/loader"
-import { PlaygroundEditor } from "./playground-editor"
 import { PlaygroundHeader } from "./playground-header"
 
-export function PlaygroundLayout() {
-  const { error, loadingStep, templateData, fetchPlaygroundData } = usePlayground()
+interface PlaygroundLayoutProps {
+  error?: string | null
+  loadingStep?: number
+  onRetry?: () => void
+  children?: React.ReactNode
+}
 
+export function PlaygroundLayout({ error, loadingStep = 3, onRetry, children }: PlaygroundLayoutProps) {
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] p-4">
         <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
         <h2 className="text-xl font-semibold text-red-600 mb-2">Something went wrong</h2>
         <p className="text-gray-600 mb-4">{error}</p>
-        <Button onClick={fetchPlaygroundData} variant="destructive">
+        <Button onClick={onRetry} variant="destructive">
           Try Again
         </Button>
       </div>
@@ -44,19 +47,10 @@ export function PlaygroundLayout() {
     )
   }
 
-  if (!templateData) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[calc(100vh-4rem)] p-4">
-        <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
-        <h2 className="text-xl font-semibold mb-2">Loading template data...</h2>
-      </div>
-    )
-  }
-
   return (
     <div className="h-screen flex flex-col">
       <PlaygroundHeader />
-      <PlaygroundEditor />
+      {children}
     </div>
   )
 }

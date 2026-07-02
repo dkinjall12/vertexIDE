@@ -50,13 +50,15 @@ export const createPlayground = async (data:{
     const {template , title , description} = data;
 
     const user = await currentUser();
+    if (!user?.id) throw new Error("Not authenticated");
+
     try {
         const playground = await db.playground.create({
             data:{
                 title:title,
                 description:description,
                 template:template,
-                userId:user?.id!
+                userId:user.id
             }
         })
 
@@ -68,18 +70,19 @@ export const createPlayground = async (data:{
 
 
 export const getAllPlaygroundForUser = async ()=>{
-    const user = await currentUser();
     try {
-        const user  = await currentUser();
+        const user = await currentUser();
+        if (!user?.id) throw new Error("Not authenticated");
+
         const playground = await db.playground.findMany({
             where:{
-                userId:user?.id!
+                userId:user.id
             },
             include:{
                 user:true,
                 Starmark:{
                     where:{
-                        userId:user?.id!
+                        userId:user.id
                     },
                     select:{
                         isMarked:true
@@ -183,8 +186,7 @@ export const duplicateProjectById = async (id: string) => {
                 template: originalPlayground.template,
                 userId: originalPlayground.userId,
                 templateFiles: {
-                  // @ts-ignore
-                    create: originalPlayground.templateFiles.map((file) => ({
+                    create: originalPlayground.templateFiles.map((file: { content: any }) => ({
                         content: file.content,
                     })),
                 },

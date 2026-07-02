@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { InferenceClient } from "@huggingface/inference";
+import { auth } from "@/auth";
 
 const client = new InferenceClient(process.env.HF_TOKEN!);
 
@@ -25,6 +26,11 @@ interface CodeContext {
 }
 
 export async function POST(request: NextRequest) {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body: CodeSuggestionRequest = await request.json()
     const { fileContent, cursorLine, cursorColumn, suggestionType, fileName } = body
@@ -53,9 +59,9 @@ export async function POST(request: NextRequest) {
         generatedAt: new Date().toISOString(),
       },
     })
-  } catch (error: any) {
+  } catch (error) {
     console.error("Context analysis error:", error)
-    return NextResponse.json({ error: "Internal server error", message: error.message }, { status: 500 })
+    return NextResponse.json({ error: "Internal server error", message: error instanceof Error ? error.message : "Unknown error" }, { status: 500 })
   }
 }
 
@@ -242,12 +248,4 @@ function detectIncompletePatterns(line: string, column: number): string[] {
   if (/\.\s*$/.test(beforeCursor)) patterns.push("method-call")
 
   return patterns
-}
-
-function getLastNonEmptyLine(lines: string[], currentLine: number): string {
-  for (let i = currentLine - 1; i >= 0; i--) {
-    const line = lines[i]
-    if (line.trim() !== "") return line
-  }
-  return ""
 }
