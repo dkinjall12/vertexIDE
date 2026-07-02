@@ -41,7 +41,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import Link from "next/link";
 import { useState } from "react";
 import {
   MoreHorizontal,
@@ -190,12 +189,12 @@ export default function ProjectTable({
               <TableRow key={project.id}>
                 <TableCell className="font-medium">
                   <div className="flex flex-col">
-                    <Link
+                    <a
                       href={`/playground/${project.id}`}
                       className="hover:underline"
                     >
                       <span className="font-semibold">{project.title}</span>
-                    </Link>
+                    </a>
                     <span className="text-sm text-gray-500 line-clamp-1">
                       {project.description}
                     </span>
@@ -242,23 +241,24 @@ export default function ProjectTable({
                         />
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
-                        <Link
+                        <a
                           href={`/playground/${project.id}`}
                           className="flex items-center"
                         >
                           <Eye className="h-4 w-4 mr-2" />
                           Open Project
-                        </Link>
+                        </a>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
-                        <Link
+                        <a
                           href={`/playground/${project.id}`}
                           target="_blank"
+                          rel="noopener noreferrer"
                           className="flex items-center"
                         >
                           <ExternalLink className="h-4 w-4 mr-2" />
                           Open in New Tab
-                        </Link>
+                        </a>
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem

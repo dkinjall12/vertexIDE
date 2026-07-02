@@ -22,7 +22,7 @@ export const useWebContainer = (): UseWebContainerReturn => {
 
     async function initializeWebContainer() {
       try {
-        const webcontainerInstance = await WebContainer.boot();
+        const webcontainerInstance = await WebContainer.boot({ coep: 'credentialless' });
         
         if (!mounted) return;
         

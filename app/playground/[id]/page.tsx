@@ -37,8 +37,13 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
-import WebContainerPreview from "@/features/webcontainers/components/webcontainer-preveiw";
+import dynamic from "next/dynamic";
 import LoadingStep from "@/components/ui/loader";
+
+const WebContainerPreview = dynamic(
+  () => import("@/features/webcontainers/components/webcontainer-preveiw"),
+  { ssr: false }
+);
 import { PlaygroundEditor } from "@/features/playground/components/playground-editor";
 import ToggleAI from "@/features/playground/components/toggle-ai";
 import { useFileExplorer } from "@/features/playground/hooks/useFileExplorer";
@@ -420,6 +425,9 @@ const MainPlaygroundPage: React.FC = () => {
                   isEnabled={aiSuggestions.isEnabled}
                   onToggle={aiSuggestions.toggleEnabled}
                   suggestionLoading={aiSuggestions.isLoading}
+                  activeFileName={activeFile ? `${activeFile.filename}${activeFile.fileExtension ? `.${activeFile.fileExtension}` : ""}` : undefined}
+                  activeFileContent={activeFile?.content}
+                  activeFileLanguage={activeFile?.fileExtension || undefined}
                 />
 
                 <DropdownMenu>
