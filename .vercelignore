@@ -1,0 +1,6 @@
+# Never upload local env files to Vercel. Environment variables are provided by
+# the Vercel dashboard (Project Settings > Environment Variables). Uploading a
+# local .env leaks secrets into the deployment bundle and can override runtime
+# values (e.g. NEXTAUTH_URL=http://localhost:3000 breaking OAuth in production).
+.env
+.env.*

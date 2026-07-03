@@ -1,8 +1,7 @@
-import { readTemplateStructureFromJson, saveTemplateStructureToJson } from "@/features/playground/libs/path-to-json";
+import { scanTemplateDirectory } from "@/features/playground/libs/path-to-json";
 import { db } from "@/lib/db";
 import { templatePaths } from "@/lib/template";
 import path from "path";
-import fs from "fs/promises";
 import { NextRequest } from "next/server";
 
 // Helper function to ensure valid JSON
@@ -44,23 +43,16 @@ export async function GET(
 
   try {
     const inputPath = path.join(process.cwd(), templatePath);
-    const outputFile = path.join(process.cwd(), `output/${templateKey}.json`);
 
-    console.log("Input Path:", inputPath);
-    console.log("Output Path:", outputFile);
+    // Scan the template directory in-memory. We intentionally avoid writing an
+    // intermediate JSON file to disk: on serverless platforms (e.g. Vercel) the
+    // application filesystem is read-only outside of /tmp, so writing under the
+    // project directory throws EROFS and breaks playground loading.
+    const result = await scanTemplateDirectory(inputPath);
 
-    // Save and read the template structure
-    await saveTemplateStructureToJson(inputPath, outputFile);
-    const result = await readTemplateStructureFromJson(outputFile);
-
-    // Validate the JSON structure before saving
     if (!validateJsonStructure(result.items)) {
       return Response.json({ error: "Invalid JSON structure" }, { status: 500 });
     }
-
-
-
-    await fs.unlink(outputFile);
 
     return Response.json({ success: true, templateJson: result }, { status: 200 });
   } catch (error) {
