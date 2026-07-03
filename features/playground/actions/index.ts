@@ -1,8 +1,13 @@
 "use server"
-import { currentUser } from "@/features/auth/actions";
+import { currentUser, getGithubAccessToken } from "@/features/auth/actions";
 import { db } from "@/lib/db"
 import { TemplateFolder } from "../libs/path-to-json";
 import { revalidatePath } from "next/cache";
+import {
+  GithubImportError,
+  importGithubRepo,
+  parseGithubUrl,
+} from "@/lib/github";
 
 
 // Toggle marked status for a problem
@@ -65,6 +70,58 @@ export const createPlayground = async (data:{
         return playground;
     } catch (error) {
         console.log(error)
+    }
+}
+
+
+export const createPlaygroundFromGithub = async (data: {
+    url: string;
+    title?: string;
+}) => {
+    const user = await currentUser();
+    if (!user?.id) throw new Error("Not authenticated");
+
+    let parsed;
+    try {
+        parsed = parseGithubUrl(data.url);
+    } catch (error) {
+        if (error instanceof GithubImportError) {
+            return { error: error.message };
+        }
+        throw error;
+    }
+
+    try {
+        const token = await getGithubAccessToken();
+        const { templateFolder, template, fileCount } = await importGithubRepo(
+            parsed,
+            token
+        );
+
+        const playground = await db.playground.create({
+            data: {
+                title: data.title?.trim() || parsed.repo,
+                description: `Imported from github.com/${parsed.owner}/${parsed.repo}`,
+                template,
+                userId: user.id,
+                // Store the file tree as a JSON string, matching the format that
+                // SaveUpdatedCode writes and usePlayground expects on load.
+                templateFiles: {
+                    create: {
+                        content: JSON.stringify(templateFolder),
+                    },
+                },
+            },
+        });
+
+        revalidatePath("/dashboard");
+        return { id: playground.id, fileCount };
+    } catch (error) {
+        if (error instanceof GithubImportError) {
+            return { error: error.message };
+        }
+        console.error("createPlaygroundFromGithub error:", error);
+        return { error: "Failed to import the repository. Please try again." };
     }
 }
 

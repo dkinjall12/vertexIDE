@@ -8,6 +8,43 @@ import { Progress } from "@/components/ui/progress";
 import TerminalComponent from "./terminal";
 import { WebContainer } from "@webcontainer/api";
 
+// Choose which npm script to run for the preview dev server. We prefer a real
+// dev script over "start", because frameworks like Next.js map "start" to the
+// production server (`next start`) which needs a prior build and errors out.
+const START_SCRIPT_PRIORITY = ["dev", "start", "serve", "develop"];
+
+// Turbopack (`next dev --turbopack`) relies on native/wasm bindings that are not
+// supported inside WebContainer (`turbo.createProject is not supported by the
+// wasm bindings`). The webpack-based dev server works, so we strip the flag.
+function stripUnsupportedFlags(command: string): string {
+  return command
+    .replace(/\s--turbopack\b/g, "")
+    .replace(/\s--turbo\b/g, "")
+    .trim();
+}
+
+async function detectStartScript(instance: WebContainer): Promise<string> {
+  try {
+    const pkgRaw = await instance.fs.readFile("package.json", "utf8");
+    const pkg = JSON.parse(pkgRaw);
+    const scripts = (pkg?.scripts ?? {}) as Record<string, string>;
+    const found = START_SCRIPT_PRIORITY.find((name) => scripts[name]);
+    if (!found) return "start";
+
+    // Rewrite the script in the mounted package.json if it uses Turbopack, so
+    // `npm run <script>` launches the webpack dev server instead.
+    const sanitized = stripUnsupportedFlags(scripts[found]);
+    if (sanitized !== scripts[found]) {
+      pkg.scripts[found] = sanitized;
+      await instance.fs.writeFile("package.json", JSON.stringify(pkg, null, 2));
+    }
+    return found;
+  } catch {
+    // No/invalid package.json — fall back below.
+  }
+  return "start";
+}
+
 interface WebContainerPreviewProps {
   templateData: TemplateFolder;
   serverUrl: string;
@@ -176,12 +213,20 @@ const WebContainerPreview: React.FC<WebContainerPreviewProps> = ({
         }));
         setCurrentStep(4);
 
-        // Step 4: Start the server
+        // Step 4: Start the server.
+        // Pick the most appropriate npm script instead of hardcoding "start":
+        // many projects (e.g. Next.js) use "start" for the *production* server,
+        // which requires a prior `next build` and fails with a raw import. The
+        // dev server ("dev"/"serve") is what we actually want in the preview.
+        const startScript = await detectStartScript(instance);
+
         if (terminalRef.current?.writeToTerminal) {
-          terminalRef.current.writeToTerminal("🚀 Starting development server...\r\n");
+          terminalRef.current.writeToTerminal(
+            `🚀 Starting development server (npm run ${startScript})...\r\n`
+          );
         }
-        
-        const startProcess = await instance.spawn("npm", ["run", "start"]);
+
+        const startProcess = await instance.spawn("npm", ["run", startScript]);
 
         // Listen for server ready event
         instance.on("server-ready", (port: number, url: string) => {

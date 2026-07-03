@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 // module references.
 const DEFAULT_LOGIN_REDIRECT = "/";
 const apiAuthPrefix = "/api/auth";
-const publicRoutes: string[] = ["/"];
+const publicRoutes: string[] = ["/", "/docs"];
 const authRoutes: string[] = ["/auth/sign-in"];
 
 // Auth.js (next-auth v5) session cookie names for the JWT strategy. Large JWTs
