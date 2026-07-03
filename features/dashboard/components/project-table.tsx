@@ -41,7 +41,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import Link from "next/link";
 import { useState } from "react";
 import {
   MoreHorizontal,
@@ -60,10 +59,10 @@ interface ProjectTableProps {
   onUpdateProject?: (
     id: string,
     data: { title: string; description: string }
-  ) => Promise<void>;
-  onDeleteProject?: (id: string) => Promise<void>;
-  onDuplicateProject?: (id: string) => Promise<void>;
-  onMarkasFavorite?: (id: string) => Promise<void>;
+  ) => Promise<unknown>;
+  onDeleteProject?: (id: string) => Promise<unknown>;
+  onDuplicateProject?: (id: string) => Promise<unknown>;
+  onMarkasFavorite?: (id: string) => Promise<unknown>;
 }
 
 interface EditProjectData {
@@ -86,7 +85,6 @@ export default function ProjectTable({
     description: "",
   });
   const [isLoading, setIsLoading] = useState(false);
-  const [favoutrie, setFavourite] = useState(false);
 
   const handleEditClick = (project: Project) => {
     setSelectedProject(project);
@@ -191,12 +189,12 @@ export default function ProjectTable({
               <TableRow key={project.id}>
                 <TableCell className="font-medium">
                   <div className="flex flex-col">
-                    <Link
+                    <a
                       href={`/playground/${project.id}`}
                       className="hover:underline"
                     >
                       <span className="font-semibold">{project.title}</span>
-                    </Link>
+                    </a>
                     <span className="text-sm text-gray-500 line-clamp-1">
                       {project.description}
                     </span>
@@ -218,7 +216,7 @@ export default function ProjectTable({
                     <div className="w-8 h-8 rounded-full overflow-hidden">
                       <Image
                         src={project.user.image || "/placeholder.svg"}
-                        alt={project.user.name}
+                        alt={project.user.name || "User"}
                         width={32}
                         height={32}
                         className="object-cover"
@@ -243,23 +241,24 @@ export default function ProjectTable({
                         />
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
-                        <Link
+                        <a
                           href={`/playground/${project.id}`}
                           className="flex items-center"
                         >
                           <Eye className="h-4 w-4 mr-2" />
                           Open Project
-                        </Link>
+                        </a>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
-                        <Link
+                        <a
                           href={`/playground/${project.id}`}
                           target="_blank"
+                          rel="noopener noreferrer"
                           className="flex items-center"
                         >
                           <ExternalLink className="h-4 w-4 mr-2" />
                           Open in New Tab
-                        </Link>
+                        </a>
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem

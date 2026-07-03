@@ -10,28 +10,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerTrigger,
-} from "@/components/ui/drawer";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { 
   Bot, 
-  Code, 
   FileText, 
-  Import, 
   Loader2,
   Power,
   PowerOff,
-  Braces,
-  Variable
 } from "lucide-react";
 import React from "react";
 import { cn } from "@/lib/utils";
@@ -45,6 +31,10 @@ interface ToggleAIProps {
   suggestionLoading: boolean;
   loadingProgress?: number;
   activeFeature?: string;
+  activeFileName?: string;
+  activeFileContent?: string;
+  activeFileLanguage?: string;
+  cursorPosition?: { line: number; column: number };
 }
 
 const ToggleAI: React.FC<ToggleAIProps> = ({
@@ -54,25 +44,20 @@ const ToggleAI: React.FC<ToggleAIProps> = ({
   suggestionLoading,
   loadingProgress = 0,
   activeFeature,
+  activeFileName,
+  activeFileContent,
+  activeFileLanguage,
+  cursorPosition = { line: 1, column: 1 },
 }) => {
   const [isChatOpen, setIsChatOpen] = useState(false);
 
-  // Dummy handler for code insertion from AI chat panel
   const handleInsertCode = (code: string, fileName?: string, position?: { line: number; column: number }) => {
-    // TODO: Implement actual code insertion logic
-    // For now, just log the code and info
     console.log("Insert code:", { code, fileName, position });
-    // You can add your integration with the editor here
   };
 
-  // Dummy handler for running code from AI chat panel
   const handleRunCode = (code: string, language: string) => {
     console.log("Run code:", { code, language });
   };
-
-  // Dummy activeFile and cursorPosition for demonstration
-  const activeFile = { name: "example.ts", content: "// file content" };
-  const cursorPosition = { line: 1, column: 1 };
 
   return (
     <>
@@ -197,9 +182,9 @@ const ToggleAI: React.FC<ToggleAIProps> = ({
         onClose={() => setIsChatOpen(false)}
         onInsertCode={handleInsertCode}
         onRunCode={handleRunCode}
-        activeFileName={activeFile?.name}
-        activeFileContent={activeFile?.content}
-        activeFileLanguage="TypeScript" // Assuming TypeScript as the language
+        activeFileName={activeFileName}
+        activeFileContent={activeFileContent}
+        activeFileLanguage={activeFileLanguage}
         cursorPosition={cursorPosition}
         theme="dark"
       />

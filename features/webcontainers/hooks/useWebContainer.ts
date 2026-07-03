@@ -1,10 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { WebContainer } from '@webcontainer/api';
-import { TemplateFolder } from '@/features/playground/libs/path-to-json';
-
-interface UseWebContainerProps {
-  templateData: TemplateFolder;
-}
 
 interface UseWebContainerReturn {
   serverUrl: string | null;
@@ -12,24 +7,26 @@ interface UseWebContainerReturn {
   error: string | null;
   instance: WebContainer | null;
   writeFileSync: (path: string, content: string) => Promise<void>;
-  destroy: () => void; // Added destroy function
+  destroy: () => void;
 }
 
-export const useWebContainer = ({ templateData }: UseWebContainerProps): UseWebContainerReturn => {
+export const useWebContainer = (): UseWebContainerReturn => {
   const [serverUrl, setServerUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [instance, setInstance] = useState<WebContainer | null>(null);
+  const instanceRef = useRef<WebContainer | null>(null);
 
   useEffect(() => {
     let mounted = true;
 
     async function initializeWebContainer() {
       try {
-        const webcontainerInstance = await WebContainer.boot();
+        const webcontainerInstance = await WebContainer.boot({ coep: 'credentialless' });
         
         if (!mounted) return;
         
+        instanceRef.current = webcontainerInstance;
         setInstance(webcontainerInstance);
         setIsLoading(false);
       } catch (err) {
@@ -45,8 +42,8 @@ export const useWebContainer = ({ templateData }: UseWebContainerProps): UseWebC
 
     return () => {
       mounted = false;
-      if (instance) {
-        instance.teardown();
+      if (instanceRef.current) {
+        instanceRef.current.teardown();
       }
     };
   }, []);

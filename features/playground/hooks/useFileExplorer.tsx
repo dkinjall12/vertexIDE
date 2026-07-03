@@ -6,6 +6,10 @@ import { SaveUpdatedCode } from "../actions";
 import { generateFileId } from "../libs";
 import { usePlayground } from "./usePlayground";
 
+import type { WebContainer } from "@webcontainer/api";
+
+type WebContainerLike = WebContainer;
+
 interface FileExplorerState {
   playgroundId: string;
   templateData: TemplateFolder | null;
@@ -26,37 +30,37 @@ interface FileExplorerState {
     newFile: TemplateFile,
     parentPath: string,
     writeFileSync: (filePath: string, content: string) => Promise<void>,
-    instance: any,
-    saveTemplateData: (data: TemplateFolder) => Promise<void>
+    instance: WebContainerLike | null,
+    saveTemplateData: (data: TemplateFolder) => Promise<unknown>
   ) => Promise<void>;
   handleAddFolder: (
     newFolder: TemplateFolder, 
     parentPath: string, 
-    instance: any, 
-    saveTemplateData: (data: TemplateFolder) => Promise<void>
+    instance: WebContainerLike | null, 
+    saveTemplateData: (data: TemplateFolder) => Promise<unknown>
   ) => Promise<void>;
   handleDeleteFile: (
     file: TemplateFile, 
     parentPath: string, 
-    saveTemplateData: (data: TemplateFolder) => Promise<void>
+    saveTemplateData: (data: TemplateFolder) => Promise<unknown>
   ) => Promise<void>;
   handleDeleteFolder: (
     folder: TemplateFolder,
     parentPath: string,
-    saveTemplateData: (data: TemplateFolder) => Promise<void>
+    saveTemplateData: (data: TemplateFolder) => Promise<unknown>
   ) => Promise<void>;
   handleRenameFile: (
     file: TemplateFile,
     newFilename: string,
     newExtension: string,
     parentPath: string,
-    saveTemplateData: (data: TemplateFolder) => Promise<void>
+    saveTemplateData: (data: TemplateFolder) => Promise<unknown>
   ) => Promise<void>;
   handleRenameFolder: (
     folder: TemplateFolder,
     newFolderName: string,
     parentPath: string,
-    saveTemplateData: (data: TemplateFolder) => Promise<void>
+    saveTemplateData: (data: TemplateFolder) => Promise<unknown>
   ) => Promise<void>;
   updateFileContent: (fileId: string, content: string) => void;
 }

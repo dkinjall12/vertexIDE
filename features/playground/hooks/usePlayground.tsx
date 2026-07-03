@@ -16,7 +16,7 @@ interface UsePlaygroundReturn {
   isLoading: boolean;
   error: string | null;
   loadPlayground: () => Promise<void>;
-  saveTemplateData: (data: TemplateFolder) => Promise<void>;
+  saveTemplateData: (data: TemplateFolder) => Promise<TemplateFolder>;
 }
 
 export const usePlayground = (id: string): UsePlaygroundReturn => {
@@ -33,8 +33,9 @@ export const usePlayground = (id: string): UsePlaygroundReturn => {
       setError(null);
 
       const data = await getPlaygroundById(id);
-    //   @ts-ignore
-      setPlaygroundData(data);
+      if (data) {
+        setPlaygroundData({ id, ...data } as PlaygroundData);
+      }
 
       const rawContent = data?.templateFiles?.[0]?.content;
       if (typeof rawContent === "string") {
@@ -71,11 +72,12 @@ export const usePlayground = (id: string): UsePlaygroundReturn => {
     }
   }, [id]);
 
-  const saveTemplateData = useCallback(async (data: TemplateFolder) => {
+  const saveTemplateData = useCallback(async (data: TemplateFolder): Promise<TemplateFolder> => {
     try {
       await SaveUpdatedCode(id, data);
       setTemplateData(data);
       toast.success("Changes saved successfully");
+      return data;
     } catch (error) {
       console.error("Error saving template data:", error);
       toast.error("Failed to save changes");

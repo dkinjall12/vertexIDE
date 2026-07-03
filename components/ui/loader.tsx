@@ -10,7 +10,7 @@ const LoadingStep: React.FC<LoadingStepProps> = ({
   step,
   label,
 }) => (
-  <div className="flex items-center gap-2 mb-2 justify-center h-screen">
+  <div className="flex items-center gap-2 mb-2 justify-center">
     <div
       className={`rounded-full p-1 ${
         currentStep === step
