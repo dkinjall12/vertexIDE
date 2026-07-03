@@ -1,46 +1,58 @@
-import NextAuth from "next-auth";
-import authConfig from "./auth.config";
+import { NextRequest, NextResponse } from "next/server";
 
-// Route constants are inlined here (rather than imported from "@/routes") so the
-// Edge middleware bundle has no external module references, which Vercel's Edge
-// Runtime bundler flags as "unsupported modules".
+// Route constants are inlined here so the Edge middleware bundle has no external
+// module references.
 const DEFAULT_LOGIN_REDIRECT = "/";
 const apiAuthPrefix = "/api/auth";
 const publicRoutes: string[] = ["/"];
 const authRoutes: string[] = ["/auth/sign-in"];
 
-const { auth } = NextAuth(authConfig);
+// Auth.js (next-auth v5) session cookie names for the JWT strategy. Large JWTs
+// are split into ".0", ".1" chunks, so we match by prefix as well.
+const SESSION_COOKIE_NAMES = [
+  "authjs.session-token",
+  "__Secure-authjs.session-token",
+];
 
-// @ts-ignore
-export default auth((req) => {
+// NOTE: We intentionally do NOT import `next-auth` here. Running NextAuth() in
+// the Edge middleware pulls Node-only code (referencing `__dirname`) into the
+// Edge bundle, which crashes on Vercel (MIDDLEWARE_INVOCATION_FAILED). Instead
+// we do a lightweight cookie-presence check; full session verification still
+// happens server-side via auth() in server components and actions.
+function hasSessionCookie(req: NextRequest): boolean {
+  return req.cookies.getAll().some((cookie) =>
+    SESSION_COOKIE_NAMES.some(
+      (name) => cookie.name === name || cookie.name.startsWith(`${name}.`)
+    )
+  );
+}
+
+export default function middleware(req: NextRequest) {
   const { nextUrl } = req;
-  const isLoggedIn = !!req.auth;
+  const isLoggedIn = hasSessionCookie(req);
 
   const isApiAuthRoute = nextUrl.pathname.startsWith(apiAuthPrefix);
-
   const isPublicRoute = publicRoutes.includes(nextUrl.pathname);
-
   const isAuthRoute = authRoutes.includes(nextUrl.pathname);
 
   if (isApiAuthRoute) {
-    return null;
+    return NextResponse.next();
   }
 
   if (isAuthRoute) {
     if (isLoggedIn) {
-      return Response.redirect(new URL(DEFAULT_LOGIN_REDIRECT, nextUrl));
+      return NextResponse.redirect(new URL(DEFAULT_LOGIN_REDIRECT, nextUrl));
     }
-    return null;
+    return NextResponse.next();
   }
 
-  if(!isLoggedIn && !isPublicRoute){
-    return Response.redirect(new URL("/auth/sign-in" , nextUrl))
+  if (!isLoggedIn && !isPublicRoute) {
+    return NextResponse.redirect(new URL("/auth/sign-in", nextUrl));
   }
 
-  return null
-});
+  return NextResponse.next();
+}
 
 export const config = {
-  // copied from clerk
   matcher: ["/((?!.+\\.[\\w]+$|_next).*)", "/", "/(api|trpc)(.*)"],
 };
