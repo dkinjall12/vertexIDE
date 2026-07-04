@@ -1,6 +1,6 @@
-# 🧠 Vibecode Editor – AI-Powered Web IDE
+# 🧠 VertexIDE – AI-Powered Web IDE
 
-**Vibecode Editor** is a blazing-fast, AI-integrated web IDE built entirely in the browser using **Next.js App Router**, **WebContainers**, **Monaco Editor**, and **local LLMs via Ollama**. It offers real-time code execution, an AI-powered chat assistant, and support for multiple tech stacks — all wrapped in a stunning developer-first UI.
+**VertexIDE** is a blazing-fast, AI-integrated web IDE built entirely in the browser using **Next.js App Router**, **WebContainers**, **Monaco Editor**, and **local LLMs via Ollama**. It offers real-time code execution, an AI-powered chat assistant, and support for multiple tech stacks — all wrapped in a stunning developer-first UI.
 
 ---
 
@@ -12,7 +12,7 @@
 - 🧱 **Project Templates** – Choose from React, Next.js, Express, Hono, Vue, or Angular.
 - 🗂️ **Custom File Explorer** – Create, rename, delete, and manage files/folders easily.
 - 🖊️ **Enhanced Monaco Editor** – Syntax highlighting, formatting, keybindings, and AI autocomplete.
-- 💡 **AI Suggestions with Ollama** – Local models give you code completion on `Ctrl + Space` or double `Enter`. Accept with `Tab`.
+- 💡 **AI Suggestions** – AI model gives you code completion on `Ctrl + Space` or double `Enter`. Accept with `Tab`.
 - ⚙️ **WebContainers Integration** – Instantly run frontend/backend apps right in the browser.
 - 💻 **Terminal with xterm.js** – Fully interactive embedded terminal experience.
 - 🤖 **AI Chat Assistant** – Share files with the AI and get help, refactors, or explanations.
@@ -68,17 +68,8 @@ AUTH_GITHUB_ID=your_github_client_id
 AUTH_GITHUB_SECRET=your_github_secret
 DATABASE_URL=your_mongodb_connection_string
 NEXTAUTH_URL=http://localhost:3000
+HF_TOKEN=your_hf_token
 ```
-
-### 4. Start Local Ollama Model
-
-Make sure [Ollama](https://ollama.com/) and Docker are installed, then run:
-
-```bash
-ollama run codellama
-```
-
-Or use your preferred model that supports code generation.
 
 ### 5. Run the Development Server
 
@@ -121,27 +112,11 @@ Visit `http://localhost:3000` in your browser.
 * [x] Monaco Editor + AI
 * [x] WebContainers + terminal
 * [x] AI chat for code assistance
-* [ ] GitHub repo import/export
+* [x] GitHub repo import/export
 * [ ] Save/load playground from DB
 * [ ] Real-time collaboration
 * [ ] Plugin system for templates/tools
 * [ ] One-click deploy via Vercel/Netlify
-
----
-
-## 📄 License
-
-This project is licensed under the [MIT License](LICENSE).
-
----
-
-## 🙏 Acknowledgements
-
-* [Monaco Editor](https://microsoft.github.io/monaco-editor/)
-* [Ollama](https://ollama.com/) – for offline LLMs
-* [WebContainers](https://webcontainers.io/)
-* [xterm.js](https://xtermjs.org/)
-* [NextAuth.js](https://next-auth.js.org/)
 
 ```
 
