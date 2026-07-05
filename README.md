@@ -1,36 +1,122 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🧠 VertexIDE – AI-Powered Web IDE
 
-## Getting Started
+**VertexIDE** is a blazing-fast, AI-integrated web IDE built entirely in the browser using **Next.js App Router**, **WebContainers**, **Monaco Editor**, and AI model via HF tokens. It offers real-time code execution, an AI-powered chat assistant, and support for multiple tech stacks — all wrapped in a stunning developer-first UI.
 
-First, run the development server:
+---
+
+## 🚀 Features
+
+- 🔐 **OAuth Login with NextAuth** – Supports Google & GitHub login.
+- 🎨 **Modern UI** – Built with TailwindCSS & ShadCN UI.
+- 🌗 **Dark/Light Mode** – Seamlessly toggle between themes.
+- 🧱 **Project Templates** – Choose from React, Next.js, Express, Hono, Vue, or Angular.
+- 🗂️ **Custom File Explorer** – Create, rename, delete, and manage files/folders easily.
+- 🖊️ **Enhanced Monaco Editor** – Syntax highlighting, formatting, keybindings, and AI autocomplete.
+- 💡 **AI Suggestions** – AI model gives you code completion on `Ctrl + Space` or double `Enter`. Accept with `Tab`.
+- ⚙️ **WebContainers Integration** – Instantly run frontend/backend apps right in the browser.
+- 💻 **Terminal with xterm.js** – Fully interactive embedded terminal experience.
+- 🤖 **AI Chat Assistant** – Share files with the AI and get help, refactors, or explanations.
+
+---
+
+## 🧱 Tech Stack
+
+| Layer         | Technology                                   |
+|---------------|----------------------------------------------|
+| Framework     | Next.js 15 (App Router)                      |
+| Styling       | TailwindCSS, ShadCN UI                       |
+| Language      | TypeScript                                   |
+| Auth          | NextAuth (Google + GitHub OAuth)             |
+| Editor        | Monaco Editor                                |
+| AI Suggestion | Ollama (LLMs running locally via Docker)     |
+| Runtime       | WebContainers                                |
+| Terminal      | xterm.js                                     |
+| Database      | MongoDB (via DATABASE_URL)                   |
+
+---
+
+## 🛠️ Getting Started
+
+### 1. Clone the Repo
+
+```bash
+git clone https://github.com/your-username/vibecode-editor.git
+cd vibecode-editor
+````
+
+### 2. Install Dependencies
+
+```bash
+npm install
+```
+
+### 3. Set Up Environment Variables
+
+Create a `.env.local` file using the template:
+
+```bash
+cp .env.example .env.local
+```
+
+Then, fill in your credentials:
+
+```env
+AUTH_SECRET=your_auth_secret
+AUTH_GOOGLE_ID=your_google_client_id
+AUTH_GOOGLE_SECRET=your_google_secret
+AUTH_GITHUB_ID=your_github_client_id
+AUTH_GITHUB_SECRET=your_github_secret
+DATABASE_URL=your_mongodb_connection_string
+NEXTAUTH_URL=http://localhost:3000
+HF_TOKEN=your_hf_token
+```
+
+### 5. Run the Development Server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Visit `http://localhost:3000` in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 📁 Project Structure
 
-## Learn More
+```
+.
+├── app/                     # App Router-based pages & routes
+├── components/              # UI components
+├── editor/                 # Monaco, File Explorer, Terminal
+├── lib/                     # Utility functions
+├── public/                  # Static files (incl. thumbnail)
+├── utils/                   # AI helpers, WebContainer logic
+├── .env.example             # Example env vars
+└── README.md
+```
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🎯 Keyboard Shortcuts
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+* `Ctrl + Space` or `Double Enter`: Trigger AI suggestions
+* `Tab`: Accept AI suggestion
+* `/`: Open Command Palette (if implemented)
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## ✅ Roadmap
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+* [x] Google & GitHub Auth via NextAuth
+* [x] Multiple stack templates
+* [x] Monaco Editor + AI
+* [x] WebContainers + terminal
+* [x] AI chat for code assistance
+* [x] GitHub repo import/export
+* [ ] Save/load playground from DB
+* [ ] Real-time collaboration
+* [ ] Plugin system for templates/tools
+* [ ] One-click deploy via Vercel/Netlify
+
+```
+
