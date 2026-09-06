@@ -28,7 +28,7 @@
 | Language      | TypeScript                                   |
 | Auth          | NextAuth (Google + GitHub OAuth)             |
 | Editor        | Monaco Editor                                |
-| AI Suggestion | Ollama (LLMs running locally via Docker)     |
+| AI Suggestion | HF gpt-oss-20b api                           |
 | Runtime       | WebContainers                                |
 | Terminal      | xterm.js                                     |
 | Database      | MongoDB (via DATABASE_URL)                   |
@@ -104,19 +104,3 @@ Visit `http://localhost:3000` in your browser.
 * `/`: Open Command Palette (if implemented)
 
 ---
-
-## ✅ Roadmap
-
-* [x] Google & GitHub Auth via NextAuth
-* [x] Multiple stack templates
-* [x] Monaco Editor + AI
-* [x] WebContainers + terminal
-* [x] AI chat for code assistance
-* [x] GitHub repo import/export
-* [ ] Save/load playground from DB
-* [ ] Real-time collaboration
-* [ ] Plugin system for templates/tools
-* [ ] One-click deploy via Vercel/Netlify
-
-```
-
